@@ -1,0 +1,82 @@
+    :root {
+            --primary-color: #131921;
+            --secondary-color: #232f3e;
+            --accent-color: #FF9900;
+            --light-color: #f8f9fa;
+        }
+        
+        body {
+            background-color: #f5f5f5;
+            font-family: 'Amazon Ember', Arial, sans-serif;
+        }
+        
+        .dashboard-header {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 1.5rem 0;
+            margin-bottom: 2rem;
+        }
+        
+        .card-stat {
+            border-radius: 10px;
+            transition: transform 0.3s;
+            border: none;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .card-stat:hover {
+            transform: translateY(-5px);
+        }
+        
+        .stat-icon {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+            color: var(--accent-color);
+        }
+        
+        .stat-value {
+            font-size: 1.8rem;
+            font-weight: bold;
+        }
+        
+        .stat-label {
+            color: #6c757d;
+            font-size: 0.9rem;
+        }
+        
+        .sales-table {
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .table thead th {
+            background-color: var(--secondary-color);
+            color: white;
+        }
+        
+        .btn-amazon {
+            background-color: var(--accent-color);
+            color: var(--primary-color);
+            border: none;
+            font-weight: bold;
+        }
+        
+        .btn-amazon:hover {
+            background-color: #e68a00;
+            color: white;
+        }
+        
+        .badge-sold {
+            background-color: #28a745;
+        }
+        
+        .time-period-selector .btn {
+            border-radius: 20px;
+            margin: 0 5px;
+        }
+        
+        .time-period-selector .btn.active {
+            background-color: var(--accent-color);
+            color: var(--primary-color);
+        }
