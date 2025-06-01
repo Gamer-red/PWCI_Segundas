@@ -5,9 +5,11 @@ require_once '../Config/database.php';
 $db = Database::getInstance();
 $conn = $db->getConnection();
 
-// Consulta modificada para obtener solo una imagen por producto
+// Consulta modificada para obtener productos con sus calificaciones
 $sql = "SELECT p.*, 
-        (SELECT m.Imagen FROM multimedia m WHERE m.Id_producto = p.Id_producto LIMIT 1) as Imagen 
+        (SELECT m.Imagen FROM multimedia m WHERE m.Id_producto = p.Id_producto LIMIT 1) as Imagen,
+        (SELECT AVG(c.Calificacion) FROM calificacion c WHERE c.Id_producto = p.Id_producto) as promedio_rating,
+        (SELECT COUNT(c.Id_calificacion) FROM calificacion c WHERE c.Id_producto = p.Id_producto) as total_ratings
         FROM productos p 
         WHERE p.autorizado = 1
         ORDER BY p.Id_producto DESC";
@@ -76,6 +78,10 @@ $categorias = $stmtCategorias->fetchAll(PDO::FETCH_ASSOC);
             color: #FFA41C;
             margin-bottom: 10px;
         }
+        .rating-count {
+            font-size: 0.8rem;
+            color: #555;
+        }
     </style>
 </head>
 <body>
@@ -103,7 +109,10 @@ $categorias = $stmtCategorias->fetchAll(PDO::FETCH_ASSOC);
         <!-- Listado de productos -->
         <div class="row">
             <?php if (count($productos) > 0): ?>
-                <?php foreach ($productos as $producto): ?>
+                <?php foreach ($productos as $producto): 
+                    $promedio = round($producto['promedio_rating'] ?? 0, 1);
+                    $totalRatings = $producto['total_ratings'] ?? 0;
+                ?>
                     <div class="col-md-4 col-lg-3 mb-4">
                         <div class="card product-card h-100">
                             <?php if (!empty($producto['Imagen'])): ?>
@@ -129,20 +138,29 @@ $categorias = $stmtCategorias->fetchAll(PDO::FETCH_ASSOC);
                                 ?>
                                 <span class="badge category-badge mb-2"><?php echo htmlspecialchars($categoriaNombre); ?></span>
                                 
-                                <!-- Rating (puedes implementar esto luego) -->
-                                <div class="rating">
-                                    <i class="fas fa-star"></i>
-                                    <i class="fas fa-star"></i>
-                                    <i class="fas fa-star"></i>
-                                    <i class="fas fa-star-half-alt"></i>
-                                    <i class="far fa-star"></i>
-                                    <span class="small">(15)</span>
+                                <!-- Rating -->
+                                <div class="rating mb-2">
+                                    <?php
+                                    $fullStars = floor($promedio);
+                                    $halfStar = ($promedio - $fullStars) >= 0.5;
+                                    $emptyStars = 5 - $fullStars - ($halfStar ? 1 : 0);
+                                    
+                                    for ($i = 0; $i < $fullStars; $i++) {
+                                        echo '<i class="fas fa-star"></i>';
+                                    }
+                                    if ($halfStar) {
+                                        echo '<i class="fas fa-star-half-alt"></i>';
+                                    }
+                                    for ($i = 0; $i < $emptyStars; $i++) {
+                                        echo '<i class="far fa-star"></i>';
+                                    }
+                                    ?>
+                                    <span class="rating-count">(<?php echo $totalRatings; ?>)</span>
                                 </div>
                                 
                                 <p class="card-text">
                                     <?php 
                                     $descripcion = "Descripción del producto no disponible";
-                                    // Aquí podrías añadir un campo descripción a tu tabla productos si lo necesitas
                                     echo htmlspecialchars($descripcion); 
                                     ?>
                                 </p>

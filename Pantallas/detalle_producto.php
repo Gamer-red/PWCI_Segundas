@@ -6,9 +6,8 @@ if (!isset($_SESSION['Id_usuario'])) {
     header('Location: Login.php');
     exit();
 }
-// Verificar si se recibió un ID de producto
-if (!isset($_GET['id']))
- {
+
+if (!isset($_GET['id'])) {
     header('Location: Pagina_principal.php');
     exit();
 }
@@ -25,13 +24,12 @@ $stmtProducto = $conn->prepare($sqlProducto);
 $stmtProducto->execute([$productoId]);
 $producto = $stmtProducto->fetch(PDO::FETCH_ASSOC);
 
-// Si no existe el producto o no está autorizado, redirigir
 if (!$producto) {
     header('Location: Pagina_principal.php');
     exit();
 }
 
-// Obtener multimedia del producto (imágenes y videos)
+// Obtener multimedia del producto
 $sqlMultimedia = "SELECT Imagen, Video FROM multimedia WHERE Id_producto = ?";
 $stmtMultimedia = $conn->prepare($sqlMultimedia);
 $stmtMultimedia->execute([$productoId]);
@@ -56,11 +54,13 @@ $stmtCategoria->execute([$producto['Id_categoria']]);
 $categoria = $stmtCategoria->fetch(PDO::FETCH_ASSOC);
 
 // Obtener comentarios y calificaciones
-$sqlComentarios = "SELECT c.*, u.Nombre_del_usuario, u.Avatar 
-                   FROM comentarios c 
-                   JOIN usuarios u ON c.Id_usuario = u.Id_usuario 
-                   WHERE c.Id_producto = ? 
-                   ORDER BY c.Fecha_Creacion DESC";
+$sqlComentarios = "SELECT c.*, u.Nombre_del_usuario, u.Avatar, 
+                  (SELECT cal.Calificacion FROM calificacion cal 
+                   WHERE cal.Id_producto = c.Id_producto AND cal.Id_usuario = c.Id_usuario) as Calificacion
+                  FROM comentarios c 
+                  JOIN usuarios u ON c.Id_usuario = u.Id_usuario 
+                  WHERE c.Id_producto = ? 
+                  ORDER BY c.Fecha_Creacion DESC";
 $stmtComentarios = $conn->prepare($sqlComentarios);
 $stmtComentarios->execute([$productoId]);
 $comentarios = $stmtComentarios->fetchAll(PDO::FETCH_ASSOC);
@@ -76,13 +76,62 @@ $promedioRating = round($rating['promedio'] ?? 0, 1);
 $totalRatings = $rating['total'] ?? 0;
 
 // Obtener listas del usuario si está logueado
-$listasUsuario = [];
-
+$listasUsuario = []; 
 if (isset($_SESSION['Id_usuario'])) {
-    $sqlListas = "SELECT Id_lista, Nombre_lista FROM lista WHERE Id_usuario = ?";
+    $sqlListas = "SELECT Id_lista, Nombre_lista 
+                  FROM lista 
+                  WHERE Id_usuario = ? 
+                  AND Nombre_lista NOT IN ('Carrito', 'Lista de deseos')";
     $stmtListas = $conn->prepare($sqlListas);
     $stmtListas->execute([$_SESSION['Id_usuario']]);
     $listasUsuario = $stmtListas->fetchAll(PDO::FETCH_ASSOC);
+}
+
+// Verificar si el usuario ya calificó/comentó este producto
+$usuarioYaComento = false;
+if (isset($_SESSION['Id_usuario'])) {
+    $sqlCheckReview = "SELECT COUNT(*) FROM comentarios 
+                      WHERE Id_producto = ? AND Id_usuario = ?";
+    $stmtCheckReview = $conn->prepare($sqlCheckReview);
+    $stmtCheckReview->execute([$productoId, $_SESSION['Id_usuario']]);
+    $usuarioYaComento = $stmtCheckReview->fetchColumn() > 0;
+}
+
+// Procesar solicitud de cotización si se envió
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['solicitar_cotizacion'])) {
+    $productoId = $_POST['producto_id'];
+    $vendedorId = $producto['Id_usuario']; // ID del vendedor
+    
+    // Verificar si ya existe una conversación con este vendedor
+$sqlCheckConversacion = "SELECT Id_conversacion FROM conversacion 
+                         WHERE (id_emisor = ? AND id_receptor = ?) 
+                            OR (id_emisor = ? AND id_receptor = ?)";
+$stmtCheckConversacion = $conn->prepare($sqlCheckConversacion);
+$stmtCheckConversacion->execute([$_SESSION['Id_usuario'], $vendedorId, $vendedorId, $_SESSION['Id_usuario']]);
+$conversacionExistente = $stmtCheckConversacion->fetch(PDO::FETCH_ASSOC);
+    
+    if ($conversacionExistente) {
+        // Usar conversación existente
+        $conversacionId = $conversacionExistente['Id_conversacion'];
+    } else {
+        // Crear nueva conversación
+        $sqlNuevaConversacion = "INSERT INTO conversacion (id_emisor, id_receptor) VALUES (?, ?)";
+        $stmtNuevaConversacion = $conn->prepare($sqlNuevaConversacion);
+        $stmtNuevaConversacion->execute([$_SESSION['Id_usuario'], $vendedorId]);
+        $conversacionId = $conn->lastInsertId();
+    }
+    
+    // Crear mensaje inicial
+    $mensajeInicial = "Hola, estoy interesado en cotizar el producto: " . $producto['Nombre'];
+    
+    $sqlInsertMensaje = "INSERT INTO mensajes (Mensaje, Fecha, Hora, Id_conversacion, Id_emisor) 
+                         VALUES (?, NOW(), CURRENT_TIME(), ?, ?)";
+    $stmtInsertMensaje = $conn->prepare($sqlInsertMensaje);
+    $stmtInsertMensaje->execute([$mensajeInicial, $conversacionId, $_SESSION['Id_usuario']]);
+
+    // Redirigir al chat
+    header("Location: Chat.php?conversacion_id=" . $conversacionId);
+    exit();
 }
 ?>
 <!DOCTYPE html>
@@ -95,6 +144,7 @@ if (isset($_SESSION['Id_usuario'])) {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- CSS personalizado -->
     <link rel="stylesheet" href="../CSS/Estilo_DetalleProducto.css">
 </head>
 <body>
@@ -114,8 +164,8 @@ if (isset($_SESSION['Id_usuario'])) {
         
         <div class="row">
             <!-- Galería de imágenes y videos -->
-            <div class="col-md-6">
-                <div class="mb-3">
+            <div class="col-lg-6">
+                <div class="sticky-top" style="top: 20px;">
                     <?php if (!empty($imagenes)): ?>
                         <img id="mainImage" src="data:image/jpeg;base64,<?php echo base64_encode($imagenes[0]['Imagen']); ?>" 
                              class="product-image-main" alt="<?php echo htmlspecialchars($producto['Nombre']); ?>">
@@ -123,41 +173,40 @@ if (isset($_SESSION['Id_usuario'])) {
                         <img id="mainImage" src="https://via.placeholder.com/500x500?text=Sin+imagen" 
                              class="product-image-main" alt="Producto sin imagen">
                     <?php endif; ?>
-                </div>
-                
-                <div class="thumbnail-container d-flex flex-wrap">
-                    <?php foreach ($imagenes as $index => $media): ?>
-                        <img src="data:image/jpeg;base64,<?php echo base64_encode($media['Imagen']); ?>" 
-                             class="product-thumbnail" 
-                             onclick="document.getElementById('mainImage').src = this.src"
-                             alt="Miniatura <?php echo $index + 1; ?>">
-                    <?php endforeach; ?>
-                </div>
-                
-                <!-- Sección de video -->
-                <?php if (!empty($videos)): ?>
-                    <div class="video-container">
-                        <h4>Video del producto</h4>
-                        <video id="productVideo" class="video-player" controls>
-                            <source src="data:video/mp4;base64,<?php echo base64_encode($videos[0]['Video']); ?>" type="video/mp4">
-                            Tu navegador no soporta el elemento de video.
-                        </video>
-                        
-                        <?php if (count($videos) > 1): ?>
-                            <div class="d-flex flex-wrap mt-2">
-                                <?php foreach ($videos as $index => $video): ?>
-                                    <video class="video-thumbnail" onclick="changeVideo('<?php echo base64_encode($video['Video']); ?>')">
-                                        <source src="data:video/mp4;base64,<?php echo base64_encode($video['Video']); ?>" type="video/mp4">
-                                    </video>
-                                <?php endforeach; ?>
-                            </div>
-                        <?php endif; ?>
+                    
+                    <div class="thumbnail-container">
+                        <?php foreach ($imagenes as $index => $media): ?>
+                            <img src="data:image/jpeg;base64,<?php echo base64_encode($media['Imagen']); ?>" 
+                                 class="product-thumbnail" 
+                                 onclick="document.getElementById('mainImage').src = this.src"
+                                 alt="Miniatura <?php echo $index + 1; ?>">
+                        <?php endforeach; ?>
                     </div>
-                <?php endif; ?>
+                    
+                    <?php if (!empty($videos)): ?>
+                        <div class="video-container">
+                            <h4><i class="fas fa-video"></i> Video del producto</h4>
+                            <video id="productVideo" class="video-player" controls>
+                                <source src="data:video/mp4;base64,<?php echo base64_encode($videos[0]['Video']); ?>" type="video/mp4">
+                                Tu navegador no soporta el elemento de video.
+                            </video>
+                            
+                            <?php if (count($videos) > 1): ?>
+                                <div class="d-flex flex-wrap mt-2">
+                                    <?php foreach ($videos as $index => $video): ?>
+                                        <video class="video-thumbnail" onclick="changeVideo('<?php echo base64_encode($video['Video']); ?>')">
+                                            <source src="data:video/mp4;base64,<?php echo base64_encode($video['Video']); ?>" type="video/mp4">
+                                        </video>
+                                    <?php endforeach; ?>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
+                </div>
             </div>
             
             <!-- Información del producto -->
-            <div class="col-md-6">
+            <div class="col-lg-6">
                 <h1 class="mb-3"><?php echo htmlspecialchars($producto['Nombre']); ?></h1>
                 
                 <div class="d-flex align-items-center mb-3">
@@ -203,10 +252,13 @@ if (isset($_SESSION['Id_usuario'])) {
                 </div>
                 
                 <div class="d-grid gap-2 d-md-flex mb-4">
-                    <?php if ($producto['Cotizar']): ?>
-                        <button class="btn btn-primary btn-lg me-md-2">
-                            <i class="fas fa-comment-dollar"></i> Solicitar cotización
-                        </button>
+                   <?php if ($producto['Cotizar']): ?>
+                        <form method="post" class="d-inline">
+                            <input type="hidden" name="producto_id" value="<?php echo $producto['Id_producto']; ?>">
+                            <button type="submit" name="solicitar_cotizacion" class="btn btn-primary btn-lg me-md-2">
+                                <i class="fas fa-comment-dollar"></i> Solicitar cotización
+                            </button>
+                        </form>
                     <?php else: ?>
                        <button class="btn btn-warning btn-lg me-md-2" onclick="addToCart(<?php echo $producto['Id_producto']; ?>)">
                             <i class="fas fa-cart-plus"></i> Añadir al carrito
@@ -286,174 +338,111 @@ if (isset($_SESSION['Id_usuario'])) {
                         </p>
                     </div>
                 </div>
+                
+                <!-- Sección de comentarios y valoraciones -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-comments feature-icon"></i>Comentarios y valoraciones</h5>
+                    </div>
+                    <div class="card-body">
+                        <?php if ($totalRatings > 0): ?>
+                            <div class="mb-4">
+                                <h6>Promedio de valoraciones: <?php echo $promedioRating; ?> / 5</h6>
+                                <div class="progress mb-2" style="height: 20px;">
+                                    <div class="progress-bar bg-warning" role="progressbar" 
+                                         style="width: <?php echo ($promedioRating / 5) * 100; ?>%" 
+                                         aria-valuenow="<?php echo $promedioRating; ?>" 
+                                         aria-valuemin="0" aria-valuemax="5"></div>
+                                </div>
+                                <small>Basado en <?php echo $totalRatings; ?> valoraciones</small>
+                            </div>
+                            
+                            <?php foreach ($comentarios as $comentario): ?>
+                                <div class="comment-box">
+                                    <div class="d-flex align-items-center mb-2">
+                                        <?php if (!empty($comentario['Avatar'])): ?>
+                                            <img src="data:image/jpeg;base64,<?php echo base64_encode($comentario['Avatar']); ?>" 
+                                                 class="comment-avatar me-3" alt="<?php echo htmlspecialchars($comentario['Nombre_del_usuario']); ?>">
+                                        <?php else: ?>
+                                            <div class="comment-avatar bg-secondary text-white d-flex align-items-center justify-content-center me-3">
+                                                <i class="fas fa-user"></i>
+                                            </div>
+                                        <?php endif; ?>
+                                        <div>
+                                            <h6 class="mb-0"><?php echo htmlspecialchars($comentario['Nombre_del_usuario']); ?></h6>
+                                            <?php if (!empty($comentario['Calificacion'])): ?>
+                                                <div class="comment-rating">
+                                                    <?php
+                                                    $rating = round($comentario['Calificacion']);
+                                                    for ($i = 1; $i <= 5; $i++) {
+                                                        if ($i <= $rating) {
+                                                            echo '<i class="fas fa-star"></i>';
+                                                        } else {
+                                                            echo '<i class="far fa-star"></i>';
+                                                        }
+                                                    }
+                                                    ?>
+                                                </div>
+                                            <?php endif; ?>
+                                        </div>
+                                    </div>
+                                    <p class="mb-1"><?php echo htmlspecialchars($comentario['Contenido']); ?></p>
+                                    <small class="text-muted"><?php echo date('d/m/Y', strtotime($comentario['Fecha_Creacion'])); ?></small>
+                                </div>
+                            <?php endforeach; ?>
+                        <?php else: ?>
+                            <p class="text-muted">Aún no hay comentarios para este producto.</p>
+                        <?php endif; ?>
+                    </div>
+                </div>
+                
+                <!-- Formulario para dejar comentario/valoración -->
+                <?php if (isset($_SESSION['Id_usuario']) && !$usuarioYaComento): ?>
+                    <div class="review-form-container">
+                        <h5><i class="fas fa-edit feature-icon"></i>Deja tu valoración</h5>
+                        <form id="reviewForm" method="post" action="submit_review.php">
+                            <input type="hidden" name="product_id" value="<?php echo $productoId; ?>">
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Calificación:</label>
+                                <div class="star-rating">
+                                    <i class="far fa-star" data-rating="1"></i>
+                                    <i class="far fa-star" data-rating="2"></i>
+                                    <i class="far fa-star" data-rating="3"></i>
+                                    <i class="far fa-star" data-rating="4"></i>
+                                    <i class="far fa-star" data-rating="5"></i>
+                                    <input type="hidden" name="rating" id="ratingValue" required>
+                                </div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="comment" class="form-label">Comentario:</label>
+                                <textarea class="form-control" id="comment" name="comment" rows="3" required minlength="10"></textarea>
+                                <small class="text-muted">Mínimo 10 caracteres</small>
+                            </div>
+                            
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-paper-plane"></i> Enviar valoración
+                            </button>
+                        </form>
+                    </div>
+                <?php elseif (isset($_SESSION['Id_usuario']) && $usuarioYaComento): ?>
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i> Ya has dejado un comentario para este producto.
+                    </div>
+                <?php else: ?>
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-circle"></i> <a href="Login.php">Inicia sesión</a> para dejar un comentario y valoración.
+                    </div>
+                <?php endif; ?>
             </div>
         </div>
     </div>
     <!-- Bootstrap 5 JS Bundle with Popper -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-   <script>
-   // Función para agregar al carrito
-function addToCart(productId) {
-    <?php if (isset($_SESSION['Id_usuario'])): ?>
-        fetch('Cart.php', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                productId: productId, 
-                quantity: 1
-            })
-        })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('Error en la red');
-            }
-            return response.json();
-        })
-        .then(data => {
-            if (data.success) {
-                // Actualizar contador del carrito
-                const cartCount = document.getElementById('cart-count');
-                if (cartCount) {
-                    cartCount.textContent = data.cartCount;
-                }
-                alert(data.message || 'Producto añadido al carrito');
-            } else {
-                alert(data.message || 'Error al añadir al carrito');
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('Error de conexión: ' + error.message);
-        });
-    <?php else: ?>
-        alert('Debes iniciar sesión para añadir productos al carrito');
-        window.location.href = 'Login.php';
-    <?php endif; ?>
-    }
-    // Función para agregar a lista de deseos
-   function addToWishlist(productId) {
-    <?php if (isset($_SESSION['Id_usuario'])): ?>
-        const wishlistBtn = document.getElementById('wishlist-btn');
-        wishlistBtn.disabled = true;
-        wishlistBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Procesando...';
-        
-        fetch('Wishlist.php', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                action: 'add',
-                productId: productId
-            })
-        })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('Error en la red');
-            }
-            return response.json();
-        })
-        .then(data => {
-            if (data.success) {
-                // Cambiar el botón para mostrar que ya está en la lista
-                wishlistBtn.innerHTML = '<i class="fas fa-check"></i> En tu lista';
-                wishlistBtn.classList.remove('btn-outline-danger');
-                wishlistBtn.classList.add('btn-success');
-                wishlistBtn.disabled = true;
-                
-                // Mostrar mensaje de éxito
-                alert(data.message || 'Producto añadido a tu lista de deseos');
-            } else {
-                alert(data.message || 'Error al añadir a lista de deseos');
-                wishlistBtn.innerHTML = '<i class="fas fa-heart"></i> Lista de deseos';
-                wishlistBtn.disabled = false;
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('Error de conexión: ' + error.message);
-            wishlistBtn.innerHTML = '<i class="fas fa-heart"></i> Lista de deseos';
-            wishlistBtn.disabled = false;
-        });
-    <?php else: ?>
-        alert('Debes iniciar sesión para añadir productos a tu lista de deseos');
-        window.location.href = 'Login.php';
-    <?php endif; ?>
-}
-    // Función para cambiar el video principal
-    function changeVideo(videoData) {
-        const videoPlayer = document.getElementById('productVideo');
-        videoPlayer.src = 'data:video/mp4;base64,' + videoData;
-        videoPlayer.load();
-        videoPlayer.play();
-    }
-
-    // Función para crear nueva lista
-    function createNewList() {
-        const listName = document.getElementById('listName').value;
-        const description = document.getElementById('listDescription').value;
-        const productId = document.getElementById('productId').value;
-
-        if (!listName) {
-            alert('El nombre de la lista es requerido');
-            return;
-        }
-        fetch('Create_list.php', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                listName: listName,
-                description: description,
-                productId: productId
-            })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                alert('Lista creada y producto añadido');
-                // Cerrar el modal
-                const modal = bootstrap.Modal.getInstance(document.getElementById('newListModal'));
-                modal.hide();
-                // Recargar la página para mostrar la nueva lista en el dropdown
-                location.reload();
-            } else {
-                alert('Error: ' + data.message);
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('Error al crear la lista');
-        });
-    }
-    // Función para agregar a una lista existente
-    function addToList(productId, listId) {
-        fetch('add_to_list.php', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                productId: productId,
-                listId: listId
-            })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                alert('Producto añadido a la lista');
-            } else {
-                alert('Error: ' + data.message);
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('Error al añadir a la lista');
-        });
-    }
-</script>
+    <script>// Verificar sesión directamente en JavaScript
+    const isUserLoggedIn = <?php echo isset($_SESSION['Id_usuario']) ? 'true' : 'false'; ?>;
+    </script>
+    <script src="../JS/Detalle_producto.js"></script>
 </body>
 </html>

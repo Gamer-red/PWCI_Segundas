@@ -6,7 +6,6 @@ if (!isset($_SESSION['Id_usuario'])) {
     header('Location: Login.php');
     exit();
 }
-
 $db = Database::getInstance();
 $conn = $db->getConnection();
 $userId = $_SESSION['Id_usuario'];
@@ -226,7 +225,6 @@ if (isset($_GET['view'])) {
                                         <th>Producto</th>
                                         <th>Vendedor</th>
                                         <th>Precio</th>
-                                        <th>Cantidad</th>
                                         <th>Acciones</th>
                                     </tr>
                                 </thead>
@@ -250,11 +248,6 @@ if (isset($_GET['view'])) {
                                                 <?php endif; ?>
                                             </td>
                                             <td>
-                                                <input type="number" min="1" value="<?php echo $producto['cantidad']; ?>" 
-                                                       class="form-control form-control-sm" style="width: 70px;"
-                                                       onchange="updateQuantity(<?php echo $producto['id_productos_de_lista']; ?>, this.value)">
-                                            </td>
-                                            <td>
                                                 <div class="d-flex gap-2">
                                                     <a href="detalle_producto.php?id=<?php echo $producto['Id_producto']; ?>" 
                                                        class="btn btn-sm btn-outline-primary" title="Ver producto">
@@ -266,11 +259,7 @@ if (isset($_GET['view'])) {
                                                         <i class="fas fa-trash"></i>
                                                     </button>
                                                     <?php if ($listaDetalle['Nombre_lista'] !== 'Lista de deseos'): ?>
-                                                        <button class="btn btn-sm btn-outline-success" 
-                                                                onclick="moveToWishlist(<?php echo $producto['Id_producto']; ?>)" 
-                                                                title="Mover a lista de deseos">
-                                                            <i class="fas fa-heart"></i>
-                                                        </button>
+                                                       
                                                     <?php endif; ?>
                                                 </div>
                                             </td>

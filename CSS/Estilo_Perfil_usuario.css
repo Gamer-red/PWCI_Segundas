@@ -1,0 +1,80 @@
+
+ .profile-header {
+            background-color: #232f3e;
+            color: white;
+            padding: 2rem 0;
+            margin-bottom: 2rem;
+        }
+        
+        .avatar-container {
+            position: relative;
+            width: 150px;
+            height: 150px;
+            margin: 0 auto;
+        }
+        
+        .avatar-img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 50%;
+            border: 4px solid white;
+        }
+        
+        .avatar-upload {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            background: #FF9900;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+        
+        .stat-card {
+            border-radius: 10px;
+            transition: all 0.3s;
+            height: 100%;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+        }
+        
+        .stat-icon {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+            color: #FF9900;
+        }
+        
+        .nav-pills .nav-link.active {
+            background-color: #FF9900;
+        }
+        
+        .nav-pills .nav-link {
+            color: #232f3e;
+        }
+        
+        .btn-amazon {
+            background-color: #FF9900;
+            color: #131921;
+            border-color: #FCD200;
+        }
+        
+        .btn-amazon:hover {
+            background-color: #F7CA00;
+            border-color: #F2C200;
+        }
+        
+        .profile-section {
+            background: white;
+            border-radius: 10px;
+            padding: 2rem;
+            box-shadow: 0 0 15px rgba(0,0,0,0.05);
+            margin-bottom: 2rem;
+        }

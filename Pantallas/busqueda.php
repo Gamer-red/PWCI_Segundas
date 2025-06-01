@@ -30,7 +30,7 @@ try {
     $sqlUsers = "SELECT Id_usuario, Nombre_del_usuario, Avatar 
                  FROM usuarios 
                  WHERE (Nombre_del_usuario LIKE ? OR Nombre LIKE ? OR Apellido_paterno LIKE ? OR Apellido_materno LIKE ?)
-                 AND Id_usuario != ? AND perfil_publico = 1
+                 AND Id_usuario != ?
                  LIMIT 10";
     $stmtUsers = $conn->prepare($sqlUsers);
     $stmtUsers->execute([$searchTerm, $searchTerm, $searchTerm, $searchTerm, $currentUserId]);

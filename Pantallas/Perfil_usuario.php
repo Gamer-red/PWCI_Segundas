@@ -37,87 +37,7 @@ if ($esVendedor) {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        .profile-header {
-            background-color: #232f3e;
-            color: white;
-            padding: 2rem 0;
-            margin-bottom: 2rem;
-        }
-        
-        .avatar-container {
-            position: relative;
-            width: 150px;
-            height: 150px;
-            margin: 0 auto;
-        }
-        
-        .avatar-img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            border-radius: 50%;
-            border: 4px solid white;
-        }
-        
-        .avatar-upload {
-            position: absolute;
-            bottom: 10px;
-            right: 10px;
-            background: #FF9900;
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-        }
-        
-        .stat-card {
-            border-radius: 10px;
-            transition: all 0.3s;
-            height: 100%;
-        }
-        
-        .stat-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
-        }
-        
-        .stat-icon {
-            font-size: 2rem;
-            margin-bottom: 1rem;
-            color: #FF9900;
-        }
-        
-        .nav-pills .nav-link.active {
-            background-color: #FF9900;
-        }
-        
-        .nav-pills .nav-link {
-            color: #232f3e;
-        }
-        
-        .btn-amazon {
-            background-color: #FF9900;
-            color: #131921;
-            border-color: #FCD200;
-        }
-        
-        .btn-amazon:hover {
-            background-color: #F7CA00;
-            border-color: #F2C200;
-        }
-        
-        .profile-section {
-            background: white;
-            border-radius: 10px;
-            padding: 2rem;
-            box-shadow: 0 0 15px rgba(0,0,0,0.05);
-            margin-bottom: 2rem;
-        }
-    </style>
+    <link rel="stylesheet" href="../CSS/Estilo_Perfil_usuario.css">
 </head>
 <body>
     <!-- Navbar -->
@@ -146,8 +66,6 @@ if ($esVendedor) {
     </div>
     
     <!-- Contenido principal -->
-    
-        
         <div class="row">
             <div class="col-md-4">
                 <!-- Menú de navegación -->
@@ -191,7 +109,7 @@ if ($esVendedor) {
                     <!-- Información personal -->
                     <div class="tab-pane fade show active profile-section" id="informacion">
                         <h4 class="mb-4"><i class="fas fa-user me-2"></i>Información personal</h4>
-                        <form>
+                        <form id="formPerfil">
                             <div class="row mb-3">
                                 <div class="col-md-6">
                                     <label for="nombre" class="form-label">Nombre</label>
@@ -248,11 +166,11 @@ if ($esVendedor) {
         </div>
               <button type="submit" class="btn btn-amazon">Guardar cambios</button>
             </form>
-                        </div>
+            </div>
                     <!-- Seguridad -->
                     <div class="tab-pane fade profile-section" id="seguridad">
                         <h4 class="mb-4"><i class="fas fa-lock me-2"></i>Seguridad</h4>
-                        <form>
+                       <form id="formSeguridad">
                             <div class="mb-3">
                                 <label for="contraseniaActual" class="form-label">Contraseña actual</label>
                                 <input type="password" class="form-control" id="contraseniaActual">
@@ -279,20 +197,32 @@ if ($esVendedor) {
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         // Manejar la subida del avatar
-        document.getElementById('avatarInput').addEventListener('change', function(e) {
+       document.getElementById('avatarInput').addEventListener('change', function(e) {
             if (this.files && this.files[0]) {
-                const reader = new FileReader();
-                
-                reader.onload = function(e) {
-                    document.querySelector('.avatar-img').src = e.target.result;
-                    // Aquí podrías agregar código para subir la imagen al servidor
-                }
-                
-                reader.readAsDataURL(this.files[0]);
+                const formData = new FormData();
+                formData.append('avatar', this.files[0]);
+
+                fetch('upload_avatar.php', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        document.querySelector('.avatar-img').src = data.avatarUrl;
+                        alert('Avatar actualizado correctamente');
+                    } else {
+                        alert('Error al actualizar el avatar: ' + data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Ocurrió un error al subir el avatar');
+                });
             }
         });
         // Manejar el envío del formulario
-        document.querySelector('form').addEventListener('submit', function(e) {
+        document.getElementById('formPerfil').addEventListener('submit', function(e) {
             e.preventDefault();
             
             // Recoger los datos del formulario
@@ -328,6 +258,43 @@ if ($esVendedor) {
             .catch(error => {
                 console.error('Error:', error);
                 alert('Ocurrió un error al actualizar el perfil');
+            });
+        });
+        // Manejar el cambio de contraseña
+        document.getElementById('formSeguridad').addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            const contraseniaActual = document.getElementById('contraseniaActual').value;
+            const nuevaContrasenia = document.getElementById('nuevaContrasenia').value;
+            const confirmarContrasenia = document.getElementById('confirmarContrasenia').value;
+
+            if (nuevaContrasenia !== confirmarContrasenia) {
+                alert('Las contraseñas no coinciden');
+                return;
+            }
+
+            fetch('cambiar_contrasenia.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    contraseniaActual: contraseniaActual,
+                    nuevaContrasenia: nuevaContrasenia
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Contraseña actualizada correctamente');
+                    document.getElementById('formSeguridad').reset();
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Ocurrió un error al cambiar la contraseña');
             });
         });
     </script>

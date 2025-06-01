@@ -1,80 +1,188 @@
-  .product-image-main {
-            width: 100%;
-            height: 400px;
-            object-fit: contain;
-            margin-bottom: 15px;
-            border: 1px solid #eee;
-            border-radius: 5px;
-        }
-        .product-thumbnail {
-            width: 80px;
-            height: 80px;
-            object-fit: cover;
-            cursor: pointer;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            margin-right: 5px;
-            margin-bottom: 5px;
-        }
-        .product-thumbnail:hover {
-            border-color: #ff9900;
-        }
-        .price {
-            font-size: 2rem;
-            color: #B12704;
-            font-weight: bold;
-        }
-        .seller-info {
-            background-color: #f8f9fa;
-            padding: 15px;
-            border-radius: 5px;
-            margin-bottom: 20px;
-        }
-        .rating-stars {
-            color: #FFA41C;
-            font-size: 1.2rem;
-        }
-        .comment-avatar {
-            width: 50px;
-            height: 50px;
-            border-radius: 50%;
-            object-fit: cover;
-        }
-        .comment-box {
-            border: 1px solid #eee;
-            border-radius: 5px;
-            padding: 15px;
-            margin-bottom: 15px;
-        }
-        .feature-icon {
-            color: #28a745;
-            margin-right: 8px;
-        }
-        .dropdown-menu {
-            max-height: 200px;
-            overflow-y: auto;
-        }
-        .video-container {
-            margin-top: 20px;
-            width: 100%;
-            max-width: 600px;
-        }
-        .video-player {
-            width: 100%;
-            height: 400px;
-            background-color: #000;
-            border-radius: 5px;
-        }
-        .video-thumbnail {
-            width: 80px;
-            height: 80px;
-            object-fit: cover;
-            cursor: pointer;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            margin-right: 5px;
-            margin-bottom: 5px;
-        }
-        .video-thumbnail:hover {
-            border-color: #ff9900;
-        }
+/* Estilos generales */
+.product-image-main {
+    width: 100%;
+    max-height: 500px;
+    object-fit: contain;
+    border-radius: 8px;
+    margin-bottom: 15px;
+}
+
+.product-thumbnail {
+    width: 80px;
+    height: 80px;
+    object-fit: cover;
+    border-radius: 5px;
+    margin-right: 10px;
+    margin-bottom: 10px;
+    cursor: pointer;
+    border: 2px solid #ddd;
+    transition: border-color 0.3s;
+}
+
+.product-thumbnail:hover {
+    border-color: #0d6efd;
+}
+
+.video-player {
+    width: 100%;
+    border-radius: 8px;
+    margin-bottom: 15px;
+}
+
+.video-thumbnail {
+    width: 80px;
+    height: 60px;
+    object-fit: cover;
+    border-radius: 5px;
+    margin-right: 10px;
+    cursor: pointer;
+    border: 2px solid #ddd;
+}
+
+.price {
+    color: #B12704;
+    font-size: 1.8rem;
+    font-weight: bold;
+}
+
+.rating-stars {
+    color: #FFA41C;
+    font-size: 1.2rem;
+}
+
+.comment-avatar {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.comment-box {
+    border-left: 3px solid #0d6efd;
+    padding-left: 15px;
+    margin-bottom: 20px;
+}
+
+.comment-rating {
+    color: #FFA41C;
+}
+
+.feature-icon {
+    color: #0d6efd;
+    margin-right: 8px;
+}
+
+.seller-info {
+    background-color: #f8f9fa;
+    padding: 15px;
+    border-radius: 8px;
+}
+
+.thumbnail-container {
+    display: flex;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+}
+
+.video-container {
+    margin-top: 30px;
+    padding: 15px;
+    background-color: #f8f9fa;
+    border-radius: 8px;
+}
+
+.review-form-container {
+    background-color: #f8f9fa;
+    padding: 20px;
+    border-radius: 8px;
+    margin-top: 30px;
+}
+
+/* Estilos para el modal */
+.modal-content {
+    border-radius: 10px;
+}
+
+.modal-header {
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+    border-radius: 10px 10px 0 0;
+}
+
+.modal-footer {
+    background-color: #f8f9fa;
+    border-top: 1px solid #dee2e6;
+    border-radius: 0 0 10px 10px;
+}
+
+/* Estilos para los botones */
+.btn-primary {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+}
+
+.btn-primary:hover {
+    background-color: #0b5ed7;
+    border-color: #0a58ca;
+}
+
+.btn-warning {
+    background-color: #ffc107;
+    border-color: #ffc107;
+    color: #000;
+}
+
+.btn-warning:hover {
+    background-color: #ffca2c;
+    border-color: #ffc720;
+}
+
+/* Estilos para los badges */
+.badge {
+    padding: 0.5em 0.75em;
+    font-size: 0.875em;
+    font-weight: 600;
+}
+
+.bg-primary {
+    background-color: #0d6efd !important;
+}
+
+.bg-success {
+    background-color: #198754 !important;
+}
+
+.bg-secondary {
+    background-color: #6c757d !important;
+}
+
+/* Estilos para el breadcrumb */
+.breadcrumb {
+    background-color: transparent;
+    padding: 0.75rem 1rem;
+    margin-bottom: 1rem;
+    border-radius: 0.375rem;
+}
+
+.breadcrumb-item + .breadcrumb-item::before {
+    content: ">";
+    color: #6c757d;
+}
+
+/* Estilos para las alertas */
+.alert {
+    border-radius: 8px;
+    padding: 1rem;
+}
+
+.alert-info {
+    background-color: #e7f8ff;
+    border-color: #b8ecff;
+    color: #055160;
+}
+
+.alert-warning {
+    background-color: #fff3cd;
+    border-color: #ffecb5;
+    color: #664d03;
+}

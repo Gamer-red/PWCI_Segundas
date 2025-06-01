@@ -206,7 +206,7 @@ $conn = null;
                         <?php elseif($esComprador): ?>
                             <!-- Menú para COMPRADORES (rol 1) -->
                             <li class="nav-item">
-                                <a class="nav-link" href="compras.php">
+                                <a class="nav-link" href="Mis_compras.php">
                                     <i class="fas fa-shopping-bag me-1"></i> Mis Compras
                                 </a>
                             </li>

@@ -21,8 +21,9 @@ $cartItems = [];
 $total = 0;
 
 if ($cartList) {
-    // Obtener los productos del carrito con información completa
-    $sqlCartItems = "SELECT pdl.*, p.Nombre, p.Precio, p.Cotizar, p.Cantidad as stock, 
+    // Obtener los productos del carrito con información completa, incluyendo si es cotización y el precio unitario
+    $sqlCartItems = "SELECT pdl.*, p.Nombre, p.Cotizar, p.Cantidad as stock, 
+                    COALESCE(pdl.precio_unitario, p.Precio) as Precio_final,
                     (SELECT Imagen FROM multimedia WHERE Id_producto = p.Id_producto LIMIT 1) as Imagen
                     FROM productos_de_lista pdl
                     JOIN productos p ON pdl.Id_producto = p.Id_producto
@@ -33,8 +34,10 @@ if ($cartList) {
 
     // Calcular el total
     foreach ($cartItems as $item) {
-        if (!$item['Cotizar']) {
-            $total += $item['Precio'] * $item['cantidad'];
+        // Si es una cotización aceptada (tiene precio_unitario) o no es cotizable
+        if (!is_null($item['precio_unitario']) || !$item['Cotizar']) {
+            $precio = is_null($item['precio_unitario']) ? $item['Precio_final'] : $item['precio_unitario'];
+            $total += $precio * $item['cantidad'];
         }
     }
 }
@@ -80,36 +83,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        .product-image {
-            max-width: 100px;
-            max-height: 100px;
-            object-fit: contain;
-        }
-        .quantity-input {
-            width: 60px;
-            text-align: center;
-        }
-        .summary-card {
-            position: sticky;
-            top: 20px;
-        }
-        .cotizar-badge {
-            background-color: #6c757d;
-        }
-        .empty-cart {
-            min-height: 300px;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-        }
-    </style>
+    <link rel="stylesheet" href="../CSS/Estilo_DetalleCarrito.css">
 </head>
 <body>
     <!-- Navbar -->
     <?php include 'Navbar.php'; ?>
-    
     <div class="container py-5">
         <div class="row">
             <div class="col-md-8">
@@ -158,9 +136,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                                 </td>
                                                 <td>
                                                     <h6 class="mb-1"><?php echo htmlspecialchars($item['Nombre']); ?></h6>
-                                                    <?php if ($item['Cotizar']): ?>
-                                                        <span class="badge cotizar-badge">Precio a cotizar</span>
-                                                    <?php endif; ?>
                                                     <?php if ($item['cantidad'] > $item['stock']): ?>
                                                         <div class="text-danger small mt-1">
                                                             <i class="fas fa-exclamation-circle"></i> Solo <?php echo $item['stock']; ?> disponibles
@@ -168,28 +143,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                                     <?php endif; ?>
                                                 </td>
                                                 <td>
-                                                    <?php if ($item['Cotizar']): ?>
-                                                        <span class="text-muted">Cotizar</span>
-                                                    <?php else: ?>
-                                                        $<?php echo number_format($item['Precio'], 2); ?>
-                                                    <?php endif; ?>
+                                                    $<?php echo number_format($item['Precio_final'], 2); ?>
                                                 </td>
                                                 <td>
                                                     <form method="post" class="d-flex">
                                                         <input type="hidden" name="product_id" value="<?php echo $item['Id_producto']; ?>">
-                                                        <input type="number" name="quantity" min="1" max="<?php echo $item['stock']; ?>" 
-                                                               value="<?php echo $item['cantidad']; ?>" class="form-control quantity-input">
-                                                        <button type="submit" name="update_quantity" class="btn btn-sm btn-outline-secondary ms-2">
-                                                            <i class="fas fa-sync-alt"></i>
-                                                        </button>
+                                                        <?php if (!is_null($item['precio_unitario'])): ?>
+                                                            <!-- Si tiene precio_unitario (propuesta aprobada), mostrar cantidad fija -->
+                                                            <input type="number" name="quantity" value="<?php echo $item['cantidad']; ?>" 
+                                                                class="form-control quantity-input" readonly>
+                                                            <button type="button" class="btn btn-sm btn-outline-secondary ms-2" disabled>
+                                                                <i class="fas fa-sync-alt"></i>
+                                                            </button>
+                                                        <?php else: ?>
+                                                            <!-- Si no tiene precio_unitario, permitir cambiar cantidad -->
+                                                            <input type="number" name="quantity" min="1" max="<?php echo $item['stock']; ?>" 
+                                                                value="<?php echo $item['cantidad']; ?>" class="form-control quantity-input">
+                                                            <button type="submit" name="update_quantity" class="btn btn-sm btn-outline-secondary ms-2">
+                                                                <i class="fas fa-sync-alt"></i>
+                                                            </button>
+                                                        <?php endif; ?>
                                                     </form>
                                                 </td>
                                                 <td>
-                                                    <?php if ($item['Cotizar']): ?>
-                                                        <span class="text-muted">-</span>
-                                                    <?php else: ?>
-                                                        $<?php echo number_format($item['Precio'] * $item['cantidad'], 2); ?>
-                                                    <?php endif; ?>
+                                                    $<?php echo number_format($item['Precio_final'] * $item['cantidad'], 2); ?>
                                                 </td>
                                                 <td class="text-end">
                                                     <form method="post" onsubmit="return confirm('¿Eliminar este producto del carrito?');">
@@ -239,36 +216,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 <span>$<?php echo number_format($total, 2); ?></span>
                             </div>
                             
-                            <?php 
-                            $hasItemsToQuote = false;
-                            $hasItemsToBuy = false;
-                            
-                            foreach ($cartItems as $item) {
-                                if ($item['Cotizar']) {
-                                    $hasItemsToQuote = true;
-                                } else {
-                                    $hasItemsToBuy = true;
-                                }
-                            }
-                            ?>
-                            
                             <div class="d-grid gap-2 mt-4">
-                                <?php if ($hasItemsToBuy): ?>
-                                    <a href="checkout.php" class="btn btn-primary btn-lg">
-                                        <i class="fas fa-credit-card me-2"></i>Proceder al pago
-                                    </a>
-                                <?php endif; ?>
-                                
-                                <?php if ($hasItemsToQuote): ?>
-                                    <a href="solicitar_cotizacion.php" class="btn btn-outline-primary btn-lg">
-                                        <i class="fas fa-comment-dollar me-2"></i>Solicitar cotización
-                                    </a>
-                                <?php endif; ?>
-                            </div>
-                            
-                            <div class="alert alert-info mt-3">
-                                <i class="fas fa-info-circle me-2"></i>
-                                Los productos marcados como "Precio a cotizar" requieren confirmación del vendedor.
+                                <a href="Metodos_pago.php" class="btn btn-primary btn-lg">
+                                    <i class="fas fa-credit-card me-2"></i> Proceder al pago
+                                </a>
                             </div>
                         </div>
                     </div>
@@ -278,21 +229,5 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
     <!-- Bootstrap 5 JS Bundle with Popper -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        // Actualizar el contador del carrito en el navbar
-        document.addEventListener('DOMContentLoaded', function() {
-            const cartCount = <?php echo count($cartItems); ?>;
-            const cartCountElement = document.getElementById('cart-count');
-            
-            if (cartCountElement) {
-                if (cartCount > 0) {
-                    cartCountElement.textContent = cartCount;
-                    cartCountElement.style.display = 'inline-block';
-                } else {
-                    cartCountElement.style.display = 'none';
-                }
-            }
-        });
-    </script>
 </body>
 </html>

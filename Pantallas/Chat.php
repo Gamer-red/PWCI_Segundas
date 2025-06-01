@@ -1,10 +1,8 @@
 <?php
-// Iniciar sesión (si no está iniciada)
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-// Verificar si el usuario está logueado
 if (!isset($_SESSION['Id_usuario'])) {
     header("Location: login.php");
     exit();
@@ -14,27 +12,163 @@ require_once '../Config/database.php';
 $db = Database::getInstance();
 $conn = $db->getConnection();
 
-// Obtener el ID del usuario actual
 $userId = $_SESSION['Id_usuario'];
+// Verificar si el usuario es vendedor (tiene productos con Cotizar = 1)
+$esVendedor = false;
+$productosCotizables = [];
 
-// Procesar envío de nuevo mensaje
+try {
+    $sql = "SELECT COUNT(*) FROM productos WHERE Id_usuario = ? AND Cotizar = 1 AND autorizado = 1";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute([$userId]);
+    $esVendedor = ($stmt->fetchColumn() > 0);
+    
+    if ($esVendedor) {
+        $sql = "SELECT Id_producto, Nombre, Precio FROM productos 
+                WHERE Id_usuario = ? AND Cotizar = 1 AND autorizado = 1";
+        $stmt = $conn->prepare($sql);
+        $stmt->execute([$userId]);
+        $productosCotizables = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+} catch (PDOException $e) {
+    $error = "Error al verificar productos: " . $e->getMessage();
+}
+// Enviar nuevo mensaje
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mensaje'])) {
     $conversacionId = $_POST['conversacion_id'];
     $mensaje = trim($_POST['mensaje']);
-    
+
     if (!empty($mensaje) && !empty($conversacionId)) {
         try {
-            $sql = "INSERT INTO mensajes (Mensaje, Fecha, Hora, Id_conversacion) 
-                    VALUES (?, NOW(), CURRENT_TIME(), ?)";
+            $sql = "INSERT INTO mensajes (Mensaje, Fecha, Hora, Id_conversacion, Id_emisor) 
+                    VALUES (?, NOW(), CURRENT_TIME(), ?, ?)";
             $stmt = $conn->prepare($sql);
-            $stmt->execute([$mensaje, $conversacionId]);
+            $stmt->execute([$mensaje, $conversacionId, $userId]);
         } catch (PDOException $e) {
             $error = "Error al enviar el mensaje: " . $e->getMessage();
         }
     }
 }
+// Enviar nueva propuesta de cotización
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['enviar_propuesta'])) {
+    $conversacionId = $_POST['conversacion_id'];
+    $productoId = $_POST['producto_id'];
+    $cantidad = $_POST['cantidad'];
+    $precio = $_POST['precio'];
+    
+    try {
+        // Obtener ID del comprador (el otro participante de la conversación)
+        $sql = "SELECT IF(id_emisor = ?, id_receptor, id_emisor) as id_comprador 
+                FROM conversacion WHERE Id_conversacion = ?";
+        $stmt = $conn->prepare($sql);
+        $stmt->execute([$userId, $conversacionId]);
+        $comprador = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if ($comprador) {
+            // Insertar propuesta
+            $sql = "INSERT INTO propuestas_cotizacion 
+                    (Id_conversacion, Id_producto, Id_vendedor, Id_comprador, Cantidad, Precio_propuesto) 
+                    VALUES (?, ?, ?, ?, ?, ?)";
+            $stmt = $conn->prepare($sql);
+            $stmt->execute([$conversacionId, $productoId, $userId, $comprador['id_comprador'], $cantidad, $precio]);
+            
+            // Crear mensaje automático
+            $sqlProducto = "SELECT Nombre FROM productos WHERE Id_producto = ?";
+            $stmtProducto = $conn->prepare($sqlProducto);
+            $stmtProducto->execute([$productoId]);
+            $producto = $stmtProducto->fetch(PDO::FETCH_ASSOC);
+            
+            $mensaje = "He enviado una cotización para {$producto['Nombre']} - {$cantidad} unidades a \$" . number_format($precio, 2) . " cada una";
+            
+            $sqlMensaje = "INSERT INTO mensajes (Mensaje, Fecha, Hora, Id_conversacion, Id_emisor) 
+                          VALUES (?, NOW(), CURRENT_TIME(), ?, ?)";
+            $stmtMensaje = $conn->prepare($sqlMensaje);
+            $stmtMensaje->execute([$mensaje, $conversacionId, $userId]);
+            
+            header("Location: Chat.php?conversacion_id=$conversacionId");
+            exit();
+        }
+    } catch (PDOException $e) {
+        $error = "Error al enviar la cotización: " . $e->getMessage();
+    }
+}
 
-// Obtener conversaciones del usuario
+// Aceptar o rechazar propuesta
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['aceptar_propuesta']) || isset($_POST['rechazar_propuesta']))) {
+    $propuestaId = $_POST['propuesta_id'];
+    $conversacionId = $_POST['conversacion_id'];
+    $accion = isset($_POST['aceptar_propuesta']) ? 'aceptada' : 'rechazada';
+    
+    try {
+        // Actualizar estado de la propuesta
+        $sql = "UPDATE propuestas_cotizacion SET Estado = ? 
+                WHERE Id_propuesta = ? AND Id_comprador = ? AND Estado = 'pendiente'";
+        $stmt = $conn->prepare($sql);
+        $stmt->execute([$accion, $propuestaId, $userId]);
+        
+        if ($accion === 'aceptada' && $stmt->rowCount() > 0) {
+            // Obtener datos de la propuesta
+            $sql = "SELECT p.*, pr.Nombre as nombre_producto 
+                    FROM propuestas_cotizacion p
+                    JOIN productos pr ON p.Id_producto = pr.Id_producto
+                    WHERE p.Id_propuesta = ?";
+            $stmt = $conn->prepare($sql);
+            $stmt->execute([$propuestaId]);
+            $propuesta = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if ($propuesta) {
+                // 1. Obtener o crear el carrito (lista)
+                $sqlCarrito = "SELECT Id_lista FROM lista 
+                              WHERE Id_usuario = ? AND Nombre_lista = 'Carrito' LIMIT 1";
+                $stmtCarrito = $conn->prepare($sqlCarrito);
+                $stmtCarrito->execute([$userId]);
+                $carrito = $stmtCarrito->fetch(PDO::FETCH_ASSOC);
+                
+                if (!$carrito) {
+                    $sqlCrear = "INSERT INTO lista (Id_usuario, Nombre_lista, Descripcion_lista) 
+                                VALUES (?, 'Carrito', 'Productos en mi carrito de compras')";
+                    $stmtCrear = $conn->prepare($sqlCrear);
+                    $stmtCrear->execute([$userId]);
+                    $idLista = $conn->lastInsertId();
+                } else {
+                    $idLista = $carrito['Id_lista'];
+                }
+                
+                // 2. Agregar al carrito (productos_de_lista)
+                $sqlInsert = "INSERT INTO productos_de_lista (
+                                Id_lista, Id_producto, id_usuario, fecha_actualizacion, 
+                                hora_actualizacion, cantidad, precio_unitario, es_cotizacion, id_propuesta
+                             ) VALUES (?, ?, ?, CURDATE(), CURTIME(), ?, ?, 1, ?)";
+                $stmtInsert = $conn->prepare($sqlInsert);
+                $stmtInsert->execute([
+                    $idLista,
+                    $propuesta['Id_producto'],
+                    $userId,
+                    $propuesta['Cantidad'],
+                    $propuesta['Precio_propuesto'],
+                    $propuestaId
+                ]);
+            }
+        }
+        
+        // Crear mensaje de respuesta
+        $mensaje = $accion === 'aceptada' 
+            ? "He aceptado tu cotización" 
+            : "He rechazado tu cotización";
+        
+        $sqlMensaje = "INSERT INTO mensajes (Mensaje, Fecha, Hora, Id_conversacion, Id_emisor) 
+                      VALUES (?, NOW(), CURRENT_TIME(), ?, ?)";
+        $stmtMensaje = $conn->prepare($sqlMensaje);
+        $stmtMensaje->execute([$mensaje, $conversacionId, $userId]);
+        
+        header("Location: Chat.php?conversacion_id=$conversacionId");
+        exit();
+    } catch (PDOException $e) {
+        $error = "Error al procesar la cotización: " . $e->getMessage();
+    }
+}
+
+// Obtener conversaciones
 $conversaciones = [];
 try {
     $sql = "SELECT c.Id_conversacion, 
@@ -57,32 +191,47 @@ try {
     $error = "Error al cargar las conversaciones: " . $e->getMessage();
 }
 
-// Obtener mensajes de la conversación seleccionada
+// Obtener mensajes y propuestas
 $mensajes = [];
+$propuestas = [];
 $conversacionActual = null;
+
 if (isset($_GET['conversacion_id']) || isset($_POST['conversacion_id'])) {
     $conversacionId = $_GET['conversacion_id'] ?? $_POST['conversacion_id'];
     $conversacionActual = $conversacionId;
-    
+
     try {
-        // Verificar que el usuario pertenece a esta conversación
+        // Verificar acceso a la conversación
         $sql = "SELECT Id_conversacion FROM conversacion 
                 WHERE Id_conversacion = ? AND (id_emisor = ? OR id_receptor = ?)";
         $stmt = $conn->prepare($sql);
         $stmt->execute([$conversacionId, $userId, $userId]);
-        
+
         if ($stmt->rowCount() > 0) {
             // Obtener mensajes
-            $sql = "SELECT m.*, u.Nombre_del_usuario, u.Id_usuario 
+            $sql = "SELECT m.*, 
+                           CASE 
+                               WHEN m.Id_emisor = ? THEN 'Tú'
+                               ELSE u.Nombre_del_usuario 
+                           END AS Nombre_del_usuario,
+                           u.Id_usuario
                     FROM mensajes m
-                    JOIN conversacion c ON m.Id_conversacion = c.Id_conversacion
-                    JOIN usuarios u ON (m.Id_conversacion = c.Id_conversacion AND 
-                                       (u.Id_usuario = c.id_emisor OR u.Id_usuario = c.id_receptor))
-                    WHERE m.Id_conversacion = ? AND u.Id_usuario != ?
+                    JOIN usuarios u ON m.Id_emisor = u.Id_usuario
+                    WHERE m.Id_conversacion = ?
                     ORDER BY m.Fecha ASC, m.Hora ASC";
             $stmt = $conn->prepare($sql);
-            $stmt->execute([$conversacionId, $userId]);
+            $stmt->execute([$userId, $conversacionId]);
             $mensajes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            
+            // Obtener propuestas de cotización
+            $sql = "SELECT p.*, pr.Nombre as nombre_producto 
+                    FROM propuestas_cotizacion p
+                    JOIN productos pr ON p.Id_producto = pr.Id_producto
+                    WHERE p.Id_conversacion = ? AND (p.Id_vendedor = ? OR p.Id_comprador = ?)
+                    ORDER BY p.Fecha_propuesta DESC";
+            $stmt = $conn->prepare($sql);
+            $stmt->execute([$conversacionId, $userId, $userId]);
+            $propuestas = $stmt->fetchAll(PDO::FETCH_ASSOC);
         } else {
             $error = "No tienes acceso a esta conversación";
         }
@@ -91,131 +240,47 @@ if (isset($_GET['conversacion_id']) || isset($_POST['conversacion_id'])) {
     }
 }
 ?>
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chat | TuTiendaOnline</title>
-    <!-- Bootstrap 5 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Font Awesome para iconos -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="../CSS/Estilo_Chat.css">
     <style>
-        .chat-container {
-            display: flex;
-            height: calc(100vh - 120px);
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            overflow: hidden;
-            margin-top: 20px;
+        .btn-toggle-form {
+            margin: 5px;
         }
-        
-        .conversation-list {
-            width: 300px;
-            border-right: 1px solid #ddd;
-            overflow-y: auto;
-            background-color: #f8f9fa;
-        }
-        
-        .conversation-item {
-            padding: 15px;
-            border-bottom: 1px solid #ddd;
-            cursor: pointer;
-            transition: background-color 0.2s;
-        }
-        
-        .conversation-item:hover {
-            background-color: #e9ecef;
-        }
-        
-        .conversation-item.active {
-            background-color: #d1e7ff;
-        }
-        
-        .chat-area {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-        }
-        
-        .chat-header {
-            padding: 15px;
-            border-bottom: 1px solid #ddd;
-            background-color: #f8f9fa;
-            font-weight: bold;
-        }
-        
-        .messages-container {
-            flex: 1;
-            padding: 15px;
-            overflow-y: auto;
-            background-color: #fff;
-        }
-        
-        .message {
-            margin-bottom: 15px;
-            max-width: 70%;
-        }
-        
-        .message.received {
-            align-self: flex-start;
-            background-color: #f1f1f1;
-            border-radius: 0 15px 15px 15px;
-            padding: 10px 15px;
-        }
-        
-        .message.sent {
-            align-self: flex-end;
-            background-color: #007bff;
-            color: white;
-            border-radius: 15px 0 15px 15px;
-            padding: 10px 15px;
-        }
-        
-        .message-info {
-            font-size: 0.8rem;
-            margin-bottom: 5px;
-            color: #6c757d;
-        }
-        
-        .message.sent .message-info {
-            color: rgba(255, 255, 255, 0.7);
-        }
-        
-        .message-form {
+        .form-container {
+            display: none;
             padding: 15px;
             border-top: 1px solid #ddd;
             background-color: #f8f9fa;
         }
-        
-        .no-conversation {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            height: 100%;
-            color: #6c757d;
+        .form-container.active {
+            display: block;
         }
     </style>
 </head>
 <body>
     <?php include 'Navbar.php'; ?>
-    
+
     <div class="container">
         <h2 class="my-4"><i class="fas fa-comments me-2"></i> Chat</h2>
-        
+
         <?php if (isset($error)): ?>
             <div class="alert alert-danger"><?php echo htmlspecialchars($error); ?></div>
         <?php endif; ?>
-        
+
         <div class="chat-container">
             <div class="conversation-list">
                 <?php if (empty($conversaciones)): ?>
                     <div class="p-3 text-center text-muted">No tienes conversaciones</div>
                 <?php else: ?>
                     <?php foreach ($conversaciones as $conv): ?>
-                        <div class="conversation-item <?php echo ($conv['Id_conversacion'] == $conversacionActual) ? 'active' : ''; ?>" 
+                        <div class="conversation-item p-3 <?php echo ($conv['Id_conversacion'] == $conversacionActual) ? 'active' : ''; ?>" 
                              onclick="window.location.href='Chat.php?conversacion_id=<?php echo $conv['Id_conversacion']; ?>'">
                             <div class="fw-bold"><?php echo htmlspecialchars($conv['nombre_contacto']); ?></div>
                             <div class="small text-muted">ID: <?php echo htmlspecialchars($conv['id_contacto']); ?></div>
@@ -223,7 +288,7 @@ if (isset($_GET['conversacion_id']) || isset($_POST['conversacion_id'])) {
                     <?php endforeach; ?>
                 <?php endif; ?>
             </div>
-            
+
             <div class="chat-area">
                 <?php if (empty($conversacionActual)): ?>
                     <div class="no-conversation">
@@ -243,50 +308,166 @@ if (isset($_GET['conversacion_id']) || isset($_POST['conversacion_id'])) {
                         }
                     }
                     ?>
-                    <div class="chat-header">
+                    <div class="chat-header p-3 bg-light border-bottom">
                         <i class="fas fa-user me-2"></i> <?php echo htmlspecialchars($nombreContacto); ?>
                     </div>
-                    
+
                     <div class="messages-container" id="messages-container">
-                        <?php if (empty($mensajes)): ?>
+                        <?php if (empty($mensajes) && empty($propuestas)): ?>
                             <div class="text-center text-muted mt-4">No hay mensajes en esta conversación</div>
                         <?php else: ?>
-                            <?php foreach ($mensajes as $msg): ?>
-                                <div class="message <?php echo ($msg['Id_usuario'] == $userId) ? 'sent' : 'received'; ?>">
-                                    <div class="message-info">
-                                        <?php echo htmlspecialchars($msg['Nombre_del_usuario']); ?> - 
-                                        <?php echo date('d/m/Y H:i', strtotime($msg['Fecha'] . ' ' . $msg['Hora'])); ?>
+                            <?php 
+                            // Combinar mensajes y eventos de propuestas ordenados por fecha
+                            $eventos = [];
+                            
+                            foreach ($mensajes as $msg) {
+                                $eventos[] = [
+                                    'tipo' => 'mensaje',
+                                    'fecha' => strtotime($msg['Fecha'] . ' ' . $msg['Hora']),
+                                    'data' => $msg
+                                ];
+                            }
+                            
+                            foreach ($propuestas as $prop) {
+                                $eventos[] = [
+                                    'tipo' => 'propuesta',
+                                    'fecha' => strtotime($prop['Fecha_propuesta']),
+                                    'data' => $prop
+                                ];
+                            }
+                            
+                            // Ordenar eventos por fecha
+                            usort($eventos, function($a, $b) {
+                                return $a['fecha'] - $b['fecha'];
+                            });
+                            
+                            foreach ($eventos as $evento): 
+                                if ($evento['tipo'] === 'mensaje'):
+                                    $msg = $evento['data']; ?>
+                                    <div class="message <?php echo ($msg['Id_usuario'] == $userId) ? 'sent' : 'received'; ?>">
+                                        <div class="message-info small text-muted">
+                                            <?php echo htmlspecialchars($msg['Nombre_del_usuario']); ?> - 
+                                            <?php echo date('d/m/Y H:i', strtotime($msg['Fecha'] . ' ' . $msg['Hora'])); ?>
+                                        </div>
+                                        <div><?php echo htmlspecialchars($msg['Mensaje']); ?></div>
                                     </div>
-                                    <div><?php echo htmlspecialchars($msg['Mensaje']); ?></div>
-                                </div>
+                                <?php else: 
+                                    $prop = $evento['data']; ?>
+                                    <div class="propuesta-card card mb-3 <?php echo $prop['Estado']; ?>">
+                                        <div class="card-body">
+                                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                                <h6 class="card-title mb-0">
+                                                    <i class="fas fa-file-invoice-dollar me-2"></i>
+                                                    Cotización: <?php echo htmlspecialchars($prop['nombre_producto']); ?>
+                                                </h6>
+                                                <span class="badge bg-<?php 
+                                                    echo $prop['Estado'] === 'aceptada' ? 'success' : 
+                                                         ($prop['Estado'] === 'rechazada' ? 'danger' : 'warning'); ?>">
+                                                    <?php echo ucfirst($prop['Estado']); ?>
+                                                </span>
+                                            </div>
+                                            
+                                            <div class="row">
+                                                <div class="col-md-4">
+                                                    <small class="text-muted">Cantidad:</small>
+                                                    <div><?php echo $prop['Cantidad']; ?></div>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <small class="text-muted">Precio unitario:</small>
+                                                    <div>$<?php echo number_format($prop['Precio_propuesto'], 2); ?></div>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <small class="text-muted">Total:</small>
+                                                    <div>$<?php echo number_format($prop['Cantidad'] * $prop['Precio_propuesto'], 2); ?></div>
+                                                </div>
+                                            </div>
+                                            
+                                            <?php if ($prop['Estado'] === 'pendiente' && $prop['Id_comprador'] == $userId): ?>
+                                                <form method="POST" class="mt-3">
+                                                    <input type="hidden" name="propuesta_id" value="<?php echo $prop['Id_propuesta']; ?>">
+                                                    <input type="hidden" name="conversacion_id" value="<?php echo $conversacionActual; ?>">
+                                                    <button type="submit" name="aceptar_propuesta" class="btn btn-sm btn-success me-2">
+                                                        <i class="fas fa-check"></i> Aceptar
+                                                    </button>
+                                                    <button type="submit" name="rechazar_propuesta" class="btn btn-sm btn-danger">
+                                                        <i class="fas fa-times"></i> Rechazar
+                                                    </button>
+                                                </form>
+                                            <?php endif; ?>
+                                        </div>
+                                    </div>
+                                <?php endif; ?>
                             <?php endforeach; ?>
                         <?php endif; ?>
                     </div>
-                    
-                    <form method="POST" class="message-form">
-                        <input type="hidden" name="conversacion_id" value="<?php echo htmlspecialchars($conversacionActual); ?>">
-                        <div class="input-group">
-                            <input type="text" name="mensaje" class="form-control" placeholder="Escribe un mensaje..." required>
-                            <button type="submit" class="btn btn-primary">
-                                <i class="fas fa-paper-plane"></i> Enviar
+
+                    <div class="button-container p-3 border-top bg-light d-flex justify-content-center">
+                        <button id="btn-mensaje" class="btn btn-primary btn-toggle-form me-2">
+                            <i class="fas fa-comment"></i> Enviar mensaje
+                        </button>
+                        
+                        <?php if ($esVendedor && !empty($productosCotizables)): ?>
+                            <button id="btn-cotizacion" class="btn btn-success btn-toggle-form">
+                                <i class="fas fa-file-invoice-dollar"></i> Enviar cotización
                             </button>
+                        <?php endif; ?>
+                    </div>
+
+                    <!-- Formulario de mensaje -->
+                    <div id="form-mensaje" class="form-container">
+                        <form method="POST">
+                            <input type="hidden" name="conversacion_id" value="<?php echo htmlspecialchars($conversacionActual); ?>">
+                            <div class="input-group">
+                                <input type="text" name="mensaje" class="form-control" placeholder="Escribe un mensaje..." required>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-paper-plane"></i> Enviar
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Formulario de cotización (solo para vendedores) -->
+                    <?php if ($esVendedor && !empty($productosCotizables)): ?>
+                        <div id="form-cotizacion" class="form-container">
+                            <form method="POST">
+                                <input type="hidden" name="conversacion_id" value="<?php echo htmlspecialchars($conversacionActual); ?>">
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">Producto cotizable</label>
+                                    <select name="producto_id" class="form-select" required>
+                                        <option value="">Seleccione un producto</option>
+                                        <?php foreach ($productosCotizables as $producto): ?>
+                                            <option value="<?php echo $producto['Id_producto']; ?>" 
+                                                    data-precio="<?php echo $producto['Precio']; ?>">
+                                                <?php echo htmlspecialchars($producto['Nombre']); ?> 
+                                                (Precio base: $<?php echo number_format($producto['Precio'], 2); ?>)
+                                            </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">Cantidad</label>
+                                    <input type="number" name="cantidad" min="1" class="form-control" required>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">Precio unitario propuesto</label>
+                                    <input type="number" name="precio" min="0.01" step="0.01" class="form-control" required>
+                                    <small class="text-muted">Precio base: $<span id="precio-base">0.00</span></small>
+                                </div>
+                                
+                                <button type="submit" name="enviar_propuesta" class="btn btn-primary">
+                                    <i class="fas fa-paper-plane"></i> Enviar cotización
+                                </button>
+                            </form>
                         </div>
-                    </form>
+                    <?php endif; ?>
                 <?php endif; ?>
             </div>
         </div>
     </div>
-    
-    <!-- Bootstrap 5 JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        // Auto-scroll al final de los mensajes
-        document.addEventListener('DOMContentLoaded', function() {
-            const container = document.getElementById('messages-container');
-            if (container) {
-                container.scrollTop = container.scrollHeight;
-            }
-        });
-    </script>
+     <script src="../JS/Chat.js"></script>
 </body>
 </html>
