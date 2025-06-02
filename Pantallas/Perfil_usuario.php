@@ -74,9 +74,6 @@ if ($esVendedor) {
                         <li class="nav-item">
                             <a class="nav-link active" href="#informacion" data-bs-toggle="pill">Información personal</a>
                         </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="#seguridad" data-bs-toggle="pill">Seguridad</a>
-                        </li>
                     </ul>
                 </div>
                 
@@ -88,7 +85,7 @@ if ($esVendedor) {
                             <a href="ResumenVentas.php" class="btn btn-amazon">
                                 <i class="fas fa-chart-pie me-2"></i>Ver resumen de ventas
                             </a>
-                            <a href="mis_productos.php" class="btn btn-outline-secondary">
+                            <a href="Inventario.php" class="btn btn-outline-secondary">
                                 <i class="fas fa-boxes me-2"></i>Mis productos
                             </a>
                         <?php else: ?>
@@ -155,6 +152,7 @@ if ($esVendedor) {
                                 </div>
                     </div>
         <!-- Nueva sección para visibilidad del perfil -->
+         <?php if (!$esVendedor): ?>
         <div class="mb-3">
             <label class="form-label">Visibilidad del perfil</label>
             <div class="form-check form-switch">
@@ -164,6 +162,7 @@ if ($esVendedor) {
             </div>
             <small class="text-muted">Cuando está activado, otros usuarios pueden ver tu perfil.</small>
         </div>
+        <?php endif; ?>
               <button type="submit" class="btn btn-amazon">Guardar cambios</button>
             </form>
             </div>
@@ -223,43 +222,47 @@ if ($esVendedor) {
         });
         // Manejar el envío del formulario
         document.getElementById('formPerfil').addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            // Recoger los datos del formulario
-            const formData = {
-                nombre: document.getElementById('nombre').value,
-                apellidoPaterno: document.getElementById('apellidoPaterno').value,
-                apellidoMaterno: document.getElementById('apellidoMaterno').value,
-                fechaNacimiento: document.getElementById('fechaNacimiento').value,
-                nombreUsuario: document.getElementById('nombreUsuario').value,
-                correo: document.getElementById('correo').value,
-                sexo: document.querySelector('input[name="sexo"]:checked').value,
-                perfilPublico: document.getElementById('perfilPublico').checked ? 1 : 0
-            };
-            
-            // Enviar los datos al servidor (usando Fetch API)
-            fetch('actualizar_perfil.php', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(formData)
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    alert('Perfil actualizado correctamente');
-                    // Recargar la página para ver los cambios
-                    location.reload();
-                } else {
-                    alert('Error al actualizar el perfil: ' + data.message);
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('Ocurrió un error al actualizar el perfil');
-            });
-        });
+    e.preventDefault();
+    
+    // Recoger los datos del formulario
+    const formData = {
+        nombre: document.getElementById('nombre').value,
+        apellidoPaterno: document.getElementById('apellidoPaterno').value,
+        apellidoMaterno: document.getElementById('apellidoMaterno').value,
+        fechaNacimiento: document.getElementById('fechaNacimiento').value,
+        nombreUsuario: document.getElementById('nombreUsuario').value,
+        correo: document.getElementById('correo').value,
+        sexo: document.querySelector('input[name="sexo"]:checked').value
+    };
+    
+    // Solo agregar perfilPublico si no es vendedor
+    <?php if (!$esVendedor): ?>
+        formData.perfilPublico = document.getElementById('perfilPublico').checked ? 1 : 0;
+    <?php endif; ?>
+    
+    // Enviar los datos al servidor (usando Fetch API)
+    fetch('actualizar_perfil.php', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Perfil actualizado correctamente');
+            // Recargar la página para ver los cambios
+            location.reload();
+        } else {
+            alert('Error al actualizar el perfil: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Ocurrió un error al actualizar el perfil');
+    });
+});
         // Manejar el cambio de contraseña
         document.getElementById('formSeguridad').addEventListener('submit', function(e) {
             e.preventDefault();

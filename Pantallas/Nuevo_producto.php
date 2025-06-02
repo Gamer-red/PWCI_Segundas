@@ -24,24 +24,45 @@ if ($idRol != 2) { // 2 = Vendedor
     exit();
 }
 
+// Procesar creación de nueva categoría si se envió el formulario del modal
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['nueva_categoria'])) {
+    $nombreCategoria = trim($_POST['nombre_categoria']);
+    if (empty($nombreCategoria)) {
+        $error_message = 'El nombre de la categoría es requerido';
+    } else {
+        try {
+            $sql = "INSERT INTO categorias (Nombre_categoria, Id_usuario, autorizado) VALUES (?, ?, 0)";
+            $stmt = $conn->prepare($sql);
+            $stmt->execute([$nombreCategoria, $userId]);
+            
+            $_SESSION['success_message'] = 'Categoría creada exitosamente. Espera a que un administrador la apruebe.';
+            header('Location: Nuevo_producto.php');
+            exit();
+        } catch (PDOException $e) {
+            $error_message = 'Error al crear la categoría: ' . $e->getMessage();
+        }
+    }
+}
+
 // Obtener categorías disponibles
-$categorias = $conn->query("SELECT * FROM categorias WHERE Id_usuario = $userId")->fetchAll(PDO::FETCH_ASSOC);
+$categorias = $conn->query("SELECT * FROM categorias WHERE autorizado = 1")->fetchAll(PDO::FETCH_ASSOC);
 
 // Procesar el formulario cuando se envía
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['nombre'])) {
     try {
         $conn->beginTransaction();
         
         // Insertar el producto
-        $stmt = $conn->prepare("INSERT INTO productos (Id_categoria, Id_usuario, Nombre, Cotizar, Precio, Cantidad, autorizado) 
-                               VALUES (?, ?, ?, ?, ?, ?, 0)");
-        $stmt->execute([
-            $_POST['categoria'],
-            $userId,
-            $_POST['nombre'],
-            isset($_POST['cotizar']) ? 1 : 0,
-            $_POST['precio'],
-            $_POST['cantidad']
+       $stmt = $conn->prepare("INSERT INTO productos (Id_categoria, Id_usuario, Nombre, Cotizar, Precio, Cantidad, autorizado, descripcion) 
+                       VALUES (?, ?, ?, ?, ?, ?, 0, ?)");
+       $stmt->execute([
+        $_POST['categoria'],
+        $userId,
+        $_POST['nombre'],
+        isset($_POST['cotizar']) ? 1 : 0,
+        $_POST['precio'],
+        $_POST['cantidad'],
+        $_POST['descripcion'] ?? '' // Usamos el operador de fusión null para evitar errores si no se envía
         ]);
         
         $productoId = $conn->lastInsertId();
@@ -52,6 +73,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             
             $stmt = $conn->prepare("INSERT INTO multimedia (Id_producto, Imagen) VALUES (?, ?)");
             $stmt->execute([$productoId, $imagenPrincipalData]);
+        }
+
+        // Imagen 2
+        if (!empty($_FILES['imagen_2']['tmp_name'])) {
+            $imagen2Data = file_get_contents($_FILES['imagen_2']['tmp_name']);
+            $stmt = $conn->prepare("INSERT INTO multimedia (Id_producto, Imagen) VALUES (?, ?)");
+            $stmt->execute([$productoId, $imagen2Data]);
+        }
+
+        // Imagen 3
+        if (!empty($_FILES['imagen_3']['tmp_name'])) {
+            $imagen3Data = file_get_contents($_FILES['imagen_3']['tmp_name']);
+            $stmt = $conn->prepare("INSERT INTO multimedia (Id_producto, Imagen) VALUES (?, ?)");
+            $stmt->execute([$productoId, $imagen3Data]);
         }
         
         // Procesar video
@@ -94,84 +129,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        .dashboard-header {
-            background-color: #232f3e;
-            color: white;
-            padding: 1.5rem 0;
-            margin-bottom: 2rem;
-        }
-        
-        .btn-amazon {
-            background-color: #FF9900;
-            color: #131921;
-            border-color: #FCD200;
-        }
-        
-        .btn-amazon:hover {
-            background-color: #F7CA00;
-            border-color: #F2C200;
-        }
-        
-        .product-form-section {
-            background: white;
-            border-radius: 10px;
-            padding: 2rem;
-            box-shadow: 0 0 15px rgba(0,0,0,0.05);
-            margin-bottom: 2rem;
-        }
-        
-        .upload-area {
-            border: 2px dashed #ddd;
-            border-radius: 5px;
-            padding: 20px;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.3s;
-            margin-bottom: 15px;
-        }
-        
-        .upload-area:hover {
-            border-color: #FF9900;
-            background-color: #f8f9fa;
-        }
-        
-        .preview-container {
-            margin-top: 15px;
-        }
-        
-        .preview-image {
-            max-width: 100%;
-            max-height: 200px;
-            border-radius: 5px;
-            margin-top: 10px;
-        }
-        
-        .preview-video {
-            max-width: 100%;
-            max-height: 200px;
-            border-radius: 5px;
-            margin-top: 10px;
-        }
-        
-        .file-info {
-            font-size: 0.9rem;
-            color: #6c757d;
-            margin-top: 5px;
-        }
-        
-        .remove-media {
-            color: #dc3545;
-            cursor: pointer;
-            font-size: 0.9rem;
-            margin-top: 5px;
-            display: inline-block;
-        }
-        .form-control:disabled {
-            background-color: #e9ecef;
-            opacity: 1;
-        }
-    </style>
+    <link rel="stylesheet" href="../CSS/Estilo_NuevoProducto.css">
 </head>
 <body>
     <!-- Navbar -->
@@ -198,6 +156,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="alert alert-danger"><?php echo htmlspecialchars($error_message); ?></div>
         <?php endif; ?>
         
+        <?php if (isset($_SESSION['success_message'])): ?>
+            <div class="alert alert-success"><?php echo htmlspecialchars($_SESSION['success_message']); ?></div>
+            <?php unset($_SESSION['success_message']); ?>
+        <?php endif; ?>
+        
         <form action="Nuevo_producto.php" method="POST" enctype="multipart/form-data">
             <div class="row">
                 <div class="col-md-8">
@@ -207,24 +170,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         
                         <div class="mb-3">
                             <label for="nombre" class="form-label">Nombre del producto <span class="text-danger">*</span></label>
-                            <input type="text" class="form-control" id="nombre" name="nombre" required>
+                          <input type="text" class="form-control" id="nombre" name="nombre" required pattern="[A-Za-z\s]+" title="Solo se permiten letras y espacios">
                         </div>
                         
                         <div class="row mb-3">
                             <div class="col-md-6">
                                 <label for="categoria" class="form-label">Categoría <span class="text-danger">*</span></label>
-                                <select class="form-select" id="categoria" name="categoria" required>
-                                    <option value="">Selecciona una categoría</option>
-                                    <?php foreach ($categorias as $categoria): ?>
-                                        <option value="<?php echo $categoria['Id_categoria']; ?>">
-                                            <?php echo htmlspecialchars($categoria['Nombre_categoria']); ?>
-                                        </option>
-                                    <?php endforeach; ?>
-                                </select>
+                                <div class="input-group">
+                                    <select class="form-select" id="categoria" name="categoria" required>
+                                        <option value="">Selecciona una categoría</option>
+                                        <?php foreach ($categorias as $categoria): ?>
+                                            <option value="<?php echo $categoria['Id_categoria']; ?>">
+                                                <?php echo htmlspecialchars($categoria['Nombre_categoria']); ?>
+                                            </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                    <button type="button" class="btn btn-add-category" data-bs-toggle="modal" data-bs-target="#nuevaCategoriaModal">
+                                        <i class="fas fa-plus"></i>
+                                    </button>
+                                </div>
                             </div>
                             <div class="col-md-6">
                                 <label for="cantidad" class="form-label">Cantidad en stock <span class="text-danger">*</span></label>
-                                <input type="number" class="form-control" id="cantidad" name="cantidad" min="0" required>
+                                <input type="number" class="form-control" id="cantidad" name="cantidad" min="1" required>
                             </div>
                         </div>
                         
@@ -233,7 +201,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 <label for="precio" class="form-label">Precio <span class="text-danger">*</span></label>
                                 <div class="input-group">
                                     <span class="input-group-text">$</span>
-                                    <input type="number" class="form-control" id="precio" name="precio" step="0.01" min="0" required>
+                                    <input type="number" class="form-control" id="precio" name="precio" step="0.01" min="0" >
                                 </div>
                             </div>
                             <div class="col-md-6">
@@ -249,7 +217,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         
                         <div class="mb-3">
                             <label for="descripcion" class="form-label">Descripción detallada</label>
-                            <textarea class="form-control" id="descripcion" name="descripcion" rows="4"></textarea>
+                            <textarea class="form-control" id="descripcion" name="descripcion" rows="4" required></textarea>
                         </div>
                     </div>
                 </div>
@@ -297,19 +265,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         </div>
                     </div>
                     
-                    <!-- Imágenes adicionales -->
+                    <!-- Imagen 2 -->
                     <div class="product-form-section">
-                        <h4 class="mb-4"><i class="fas fa-images me-2"></i> Imágenes adicionales</h4>
-                        
-                        <div class="upload-area" id="imagenesAdicionalesUpload">
+                        <h4 class="mb-4"><i class="fas fa-image me-2"></i> Imagen 2</h4>
+
+                        <div class="upload-area" id="imagen2Upload">
                             <i class="fas fa-cloud-upload-alt fa-2x mb-2"></i>
-                            <p>Arrastra o haz clic para subir imágenes adicionales</p>
-                            <small class="text-muted">(Máximo 5 imágenes adicionales)</small>
-                            <input type="file" id="imagenes_adicionales" name="imagenes_adicionales[]" accept="image/*" multiple style="display: none;">
+                            <p>Haz clic para subir la Imagen 2</p>
+                            <input type="file" id="imagen_2" name="imagen_2" accept="image/*" style="display: none;">
                         </div>
-                        
-                        <div class="preview-container" id="imagenesAdicionalesPreview">
-                            <p class="text-muted">No hay imágenes adicionales seleccionadas</p>
+
+                        <div class="preview-container" id="imagen2Preview" style="display: none;">
+                            <img id="imagen2PreviewImg" class="preview-image">
+                            <div class="file-info" id="imagen2Info"></div>
+                            <span class="remove-media" onclick="removeMedia('imagen_2')">
+                                <i class="fas fa-trash-alt me-1"></i> Eliminar imagen
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Imagen 3 -->
+                    <div class="product-form-section">
+                        <h4 class="mb-4"><i class="fas fa-image me-2"></i> Imagen 3</h4>
+
+                        <div class="upload-area" id="imagen3Upload">
+                            <i class="fas fa-cloud-upload-alt fa-2x mb-2"></i>
+                            <p>Haz clic para subir la Imagen 3</p>
+                            <input type="file" id="imagen_3" name="imagen_3" accept="image/*" style="display: none;">
+                        </div>
+
+                        <div class="preview-container" id="imagen3Preview" style="display: none;">
+                            <img id="imagen3PreviewImg" class="preview-image">
+                            <div class="file-info" id="imagen3Info"></div>
+                            <span class="remove-media" onclick="removeMedia('imagen_3')">
+                                <i class="fas fa-trash-alt me-1"></i> Eliminar imagen
+                            </span>
                         </div>
                     </div>
                     
@@ -329,134 +319,70 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
         </form>
     </div>
+
+    <!-- Modal para nueva categoría -->
+    <div class="modal fade" id="nuevaCategoriaModal" tabindex="-1" aria-labelledby="nuevaCategoriaModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="nuevaCategoriaModalLabel"><i class="fas fa-plus-circle me-2"></i>Nueva Categoría</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form method="POST" action="Nuevo_producto.php">
+                    <div class="modal-body">
+                        <div class="alert alert-info mb-3">
+                            <i class="fas fa-info-circle me-2"></i>
+                            Las nuevas categorías deben ser aprobadas por un administrador antes de ser visibles.
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="nombre_categoria" class="form-label fw-bold">Nombre de la categoría</label>
+                           <input type="text" class="form-control" id="nombre_categoria" name="nombre_categoria"
+                                placeholder="Ej. Electrónica, Ropa, Hogar" required
+                                pattern="[A-Za-zÁÉÍÓÚáéíóúÑñ\s]+" 
+                                title="Solo se permiten letras y espacios"
+                                onkeypress="return /[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]/.test(event.key)">
+                            <div class="form-text">El nombre debe ser descriptivo y único.</div>
+                        </div>
+                        <input type="hidden" name="nueva_categoria" value="1">
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save me-2"></i>Guardar Categoría
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <!-- Bootstrap 5 JS Bundle with Popper -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <!-- jQuery -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script>
-        // Manejar la subida de la imagen principal
-        document.getElementById('imagenPrincipalUpload').addEventListener('click', function() {
-            document.getElementById('imagen_principal').click();
-        });
-        
-        document.getElementById('imagen_principal').addEventListener('change', function(e) {
-            if (this.files && this.files[0]) {
-                const file = this.files[0];
-                const reader = new FileReader();
-                
-                reader.onload = function(e) {
-                    document.getElementById('imagenPrincipalPreviewImg').src = e.target.result;
-                    document.getElementById('imagenPrincipalInfo').textContent = 
-                        `${file.name} (${(file.size / 1024).toFixed(2)} KB)`;
-                    
-                    document.getElementById('imagenPrincipalUpload').style.display = 'none';
-                    document.getElementById('imagenPrincipalPreview').style.display = 'block';
-                }
-                
-                reader.readAsDataURL(file);
-            }
-        });
-        
-        // Manejar la subida del video
-        document.getElementById('videoUpload').addEventListener('click', function() {
-            document.getElementById('video').click();
-        });
-        
-        document.getElementById('video').addEventListener('change', function(e) {
-            if (this.files && this.files[0]) {
-                const file = this.files[0];
-                const videoPreview = document.getElementById('videoPreviewElement');
-                const videoUrl = URL.createObjectURL(file);
-                
-                videoPreview.src = videoUrl;
-                document.getElementById('videoInfo').textContent = 
-                    `${file.name} (${(file.size / (1024 * 1024)).toFixed(2)} MB)`;
-                
-                document.getElementById('videoUpload').style.display = 'none';
-                document.getElementById('videoPreview').style.display = 'block';
-            }
-        });
-        
-        // Manejar la subida de imágenes adicionales
-        document.getElementById('imagenesAdicionalesUpload').addEventListener('click', function() {
-            document.getElementById('imagenes_adicionales').click();
-        });
-        
-        document.getElementById('imagenes_adicionales').addEventListener('change', function(e) {
-            const previewContainer = document.getElementById('imagenesAdicionalesPreview');
-            
-            if (this.files && this.files.length > 0) {
-                previewContainer.innerHTML = '';
-                
-                for (let i = 0; i < this.files.length; i++) {
-                    const file = this.files[i];
-                    const reader = new FileReader();
-                    
-                    reader.onload = function(e) {
-                        const previewItem = document.createElement('div');
-                        previewItem.className = 'mb-3';
-                        
-                        previewItem.innerHTML = `
-                            <img src="${e.target.result}" class="preview-image">
-                            <div class="file-info">${file.name} (${(file.size / 1024).toFixed(2)} KB)</div>
-                        `;
-                        
-                        previewContainer.appendChild(previewItem);
-                    }
-                    
-                    reader.readAsDataURL(file);
-                }
-            } else {
-                previewContainer.innerHTML = '<p class="text-muted">No hay imágenes adicionales seleccionadas</p>';
-            }
-        });
-        // Función para eliminar medios
-        function removeMedia(type) {
-            if (type === 'imagen_principal') {
-                document.getElementById('imagen_principal').value = '';
-                document.getElementById('imagenPrincipalUpload').style.display = 'block';
-                document.getElementById('imagenPrincipalPreview').style.display = 'none';
-            } else if (type === 'video') {
-                document.getElementById('video').value = '';
-                document.getElementById('videoPreviewElement').src = '';
-                document.getElementById('videoUpload').style.display = 'block';
-                document.getElementById('videoPreview').style.display = 'none';
-            }
-        }
-        // Validación del formulario
-        document.querySelector('form').addEventListener('submit', function(e) {
-            const imagenPrincipal = document.getElementById('imagen_principal').files.length;
-            
-            if (imagenPrincipal === 0) {
-                e.preventDefault();
-                alert('Debes subir al menos la imagen principal del producto');
-                return false;
-            }
-            return true;
-        });
-        document.getElementById('cotizar').addEventListener('change', function() {
+    <script src="../JS/Nuevo_producto.js"></script>
+    <script>document.addEventListener('DOMContentLoaded', function () {
+    const cotizarCheckbox = document.getElementById('cotizar');
     const precioInput = document.getElementById('precio');
-    
-    if (this.checked) {
-        precioInput.disabled = true;
-        precioInput.required = false;
-        precioInput.value = ''; // Opcional: limpiar el valor
-    } else {
-        precioInput.disabled = false;
-        precioInput.required = true;
-    }
-});
 
-// También verificar al cargar la página por si ya está marcado
-        document.addEventListener('DOMContentLoaded', function() {
-            const cotizarCheckbox = document.getElementById('cotizar');
-            const precioInput = document.getElementById('precio');
-            
-            if (cotizarCheckbox.checked) {
-                precioInput.disabled = true;
-                precioInput.required = false;
-            }
-        });
-    </script>
+    // Función para actualizar el estado del campo de precio
+    function actualizarEstadoPrecio() {
+        if (cotizarCheckbox.checked) {
+            precioInput.disabled = true;
+            precioInput.required = false;
+            precioInput.value = ''; // Opcional: borrar el valor si está cotizando
+        } else {
+            precioInput.disabled = false;
+            precioInput.required = true;
+        }
+    }
+
+    // Verificar al cargar la página
+    actualizarEstadoPrecio();
+
+    // Escuchar cambios en el checkbox
+    cotizarCheckbox.addEventListener('change', actualizarEstadoPrecio);
+});</script>
 </body>
 </html>

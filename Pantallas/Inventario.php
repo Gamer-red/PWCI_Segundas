@@ -26,7 +26,10 @@ if ($idRol != 2) { // 2 = Vendedor
 
 // Obtener productos del inventario
 $query = "SELECT p.Id_producto, p.Nombre, p.Precio, p.Cantidad, p.autorizado, 
-                 c.Nombre_categoria as Categoria
+                 c.Nombre_categoria as Categoria,
+                 (SELECT m.Imagen FROM multimedia m 
+                  WHERE m.Id_producto = p.Id_producto 
+                  LIMIT 1) as Imagen_producto
           FROM productos p
           LEFT JOIN categorias c ON p.Id_categoria = c.Id_categoria
           WHERE p.Id_usuario = ?
@@ -124,7 +127,7 @@ $productos = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     <p class="mb-0">Administra tus productos y stock</p>
                 </div>
                 <div class="col-md-4 text-md-end">
-                    <a href="Nuevo_producto.php" class="btn btn-amazon me-2">
+                    <a href="Nuevo_producto.php" class="btn btn-outline-secondary">
                         <i class="fas fa-plus me-1"></i> Nuevo Producto
                     </a>
                 </div>
@@ -192,14 +195,22 @@ $productos = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                 <th class="text-end">Precio</th>
                                 <th class="text-center">Stock</th>
                                 <th>Estado</th>
-                                <th class="text-center">Acciones</th>
+                                
                             </tr>
                         </thead>
                         <tbody>
                             <?php foreach ($productos as $producto): ?>
                             <tr>
                                 <td>
-                                    <img src="../Assets/img/product-placeholder.png" class="product-img" alt="<?php echo htmlspecialchars($producto['Nombre']); ?>">
+                                    <?php if (!empty($producto['Imagen_producto'])): ?>
+                                        <img src="data:image/jpeg;base64,<?php echo base64_encode($producto['Imagen_producto']); ?>" 
+                                            class="product-img" 
+                                            alt="<?php echo htmlspecialchars($producto['Nombre']); ?>">
+                                    <?php else: ?>
+                                        <img src="../Assets/img/product-placeholder.png" 
+                                            class="product-img" 
+                                            alt="<?php echo htmlspecialchars($producto['Nombre']); ?>">
+                                    <?php endif; ?>
                                 </td>
                                 <td><?php echo htmlspecialchars($producto['Nombre']); ?></td>
                                 <td><?php echo htmlspecialchars($producto['Categoria'] ?? 'Sin categoría'); ?></td>
@@ -215,33 +226,8 @@ $productos = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                     <?php endif; ?>
                                 </td>
                                 <td class="text-center action-buttons">
-                                    <a href="editar_producto.php?id=<?php echo $producto['Id_producto']; ?>" class="btn btn-sm btn-outline-primary" title="Editar">
-                                        <i class="fas fa-edit"></i>
-                                    </a>
-                                    <button class="btn btn-sm btn-outline-danger" title="Eliminar" data-bs-toggle="modal" data-bs-target="#deleteModal<?php echo $producto['Id_producto']; ?>">
-                                        <i class="fas fa-trash-alt"></i>
-                                    </button>
                                 </td>
-                            </tr>
-                            
-                            <!-- Modal de confirmación para eliminar -->
-                            <div class="modal fade" id="deleteModal<?php echo $producto['Id_producto']; ?>" tabindex="-1" aria-hidden="true">
-                                <div class="modal-dialog">
-                                    <div class="modal-content">
-                                        <div class="modal-header">
-                                            <h5 class="modal-title">Confirmar eliminación</h5>
-                                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                                        </div>
-                                        <div class="modal-body">
-                                            ¿Estás seguro que deseas eliminar el producto "<?php echo htmlspecialchars($producto['Nombre']); ?>"?
-                                        </div>
-                                        <div class="modal-footer">
-                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                                            <a href="eliminar_producto.php?id=<?php echo $producto['Id_producto']; ?>" class="btn btn-danger">Eliminar</a>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                            </tr>                            
                             <?php endforeach; ?>
                         </tbody>
                     </table>

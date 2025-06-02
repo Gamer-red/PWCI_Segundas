@@ -24,12 +24,13 @@ try {
     $esVendedor = ($stmt->fetchColumn() > 0);
     
     if ($esVendedor) {
-        $sql = "SELECT Id_producto, Nombre, Precio FROM productos 
-                WHERE Id_usuario = ? AND Cotizar = 1 AND autorizado = 1";
-        $stmt = $conn->prepare($sql);
-        $stmt->execute([$userId]);
-        $productosCotizables = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    }
+    $sql = "SELECT Id_producto, Nombre, Precio, Cantidad as stock 
+            FROM productos 
+            WHERE Id_usuario = ? AND Cotizar = 1 AND autorizado = 1";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute([$userId]);
+    $productosCotizables = $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
 } catch (PDOException $e) {
     $error = "Error al verificar productos: " . $e->getMessage();
 }
@@ -283,7 +284,7 @@ if (isset($_GET['conversacion_id']) || isset($_POST['conversacion_id'])) {
                         <div class="conversation-item p-3 <?php echo ($conv['Id_conversacion'] == $conversacionActual) ? 'active' : ''; ?>" 
                              onclick="window.location.href='Chat.php?conversacion_id=<?php echo $conv['Id_conversacion']; ?>'">
                             <div class="fw-bold"><?php echo htmlspecialchars($conv['nombre_contacto']); ?></div>
-                            <div class="small text-muted">ID: <?php echo htmlspecialchars($conv['id_contacto']); ?></div>
+                         
                         </div>
                     <?php endforeach; ?>
                 <?php endif; ?>
@@ -344,7 +345,7 @@ if (isset($_GET['conversacion_id']) || isset($_POST['conversacion_id'])) {
                             foreach ($eventos as $evento): 
                                 if ($evento['tipo'] === 'mensaje'):
                                     $msg = $evento['data']; ?>
-                                    <div class="message <?php echo ($msg['Id_usuario'] == $userId) ? 'sent' : 'received'; ?>">
+                                   <div class="message <?php echo ($msg['Id_usuario'] == $userId) ? 'sent' : 'received'; ?>" data-id="<?php echo $msg['Id_mensaje']; ?>">
                                         <div class="message-info small text-muted">
                                             <?php echo htmlspecialchars($msg['Nombre_del_usuario']); ?> - 
                                             <?php echo date('d/m/Y H:i', strtotime($msg['Fecha'] . ' ' . $msg['Hora'])); ?>
@@ -353,7 +354,7 @@ if (isset($_GET['conversacion_id']) || isset($_POST['conversacion_id'])) {
                                     </div>
                                 <?php else: 
                                     $prop = $evento['data']; ?>
-                                    <div class="propuesta-card card mb-3 <?php echo $prop['Estado']; ?>">
+                                    <div class="propuesta-card card mb-3 <?php echo $prop['Estado']; ?>" data-id="propuesta-<?php echo $prop['Id_propuesta']; ?>">
                                         <div class="card-body">
                                             <div class="d-flex justify-content-between align-items-center mb-2">
                                                 <h6 class="card-title mb-0">
@@ -438,7 +439,8 @@ if (isset($_GET['conversacion_id']) || isset($_POST['conversacion_id'])) {
                                         <option value="">Seleccione un producto</option>
                                         <?php foreach ($productosCotizables as $producto): ?>
                                             <option value="<?php echo $producto['Id_producto']; ?>" 
-                                                    data-precio="<?php echo $producto['Precio']; ?>">
+                                                    data-precio="<?php echo $producto['Precio']; ?>"
+                                                    data-stock="<?php echo $producto['stock']; ?>">
                                                 <?php echo htmlspecialchars($producto['Nombre']); ?> 
                                                 (Precio base: $<?php echo number_format($producto['Precio'], 2); ?>)
                                             </option>
@@ -448,7 +450,10 @@ if (isset($_GET['conversacion_id']) || isset($_POST['conversacion_id'])) {
                                 
                                 <div class="mb-3">
                                     <label class="form-label">Cantidad</label>
-                                    <input type="number" name="cantidad" min="1" class="form-control" required>
+                                    <input type="number" name="cantidad" min="1" class="form-control" 
+                                        data-stock="<?php echo $producto['stock']; ?>" 
+                                        required>
+                                    <small class="text-muted">Disponible: <span class="stock-display">0</span></small>
                                 </div>
                                 
                                 <div class="mb-3">
@@ -468,6 +473,110 @@ if (isset($_GET['conversacion_id']) || isset($_POST['conversacion_id'])) {
         </div>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-     <script src="../JS/Chat.js"></script>
+    <script src="../JS/Chat.js"></script>
+    <script>
+        function cargarNuevosMensajes() {
+            if (!<?php echo isset($conversacionActual) ? 'true' : 'false'; ?>) return;
+            
+            const ultimoMensaje = document.querySelector('.message:last-child');
+            const ultimaPropuesta = document.querySelector('.propuesta-card:last-child');
+            
+            let ultimoIdMensaje = ultimoMensaje ? ultimoMensaje.getAttribute('data-id') : 0;
+            let ultimoIdPropuesta = ultimaPropuesta ? ultimaPropuesta.getAttribute('data-id').replace('propuesta-', '') : 0;
+            
+            fetch(`../api/obtenerNuevosMensajes.php?conversacion_id=<?php echo $conversacionActual; ?>&ultimo_mensaje=${ultimoIdMensaje}&ultima_propuesta=${ultimoIdPropuesta}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.mensajes.length > 0 || data.propuestas.length > 0) {
+                        // Agregar nuevos mensajes/propuestas al DOM
+                        agregarNuevosMensajes(data.mensajes, data.propuestas);
+                        
+                        // Desplazarse al final
+                        const container = document.getElementById('messages-container');
+                        container.scrollTop = container.scrollHeight;
+                    }
+                })
+                .catch(error => console.error('Error:', error));
+        }
+
+        // Función para agregar nuevos mensajes al DOM
+        function agregarNuevosMensajes(mensajes, propuestas) {
+    const container = document.getElementById('messages-container');
+    
+    mensajes.forEach(msg => {
+        // Verificar si el mensaje ya existe para no duplicar
+        if (!document.querySelector(`.message[data-id="${msg.Id_mensaje}"]`)) {
+            const esMio = msg.Id_emisor == <?php echo $userId; ?>;
+            const html = `
+                <div class="message ${esMio ? 'sent' : 'received'}" data-id="${msg.Id_mensaje}">
+                    <div class="message-info small text-muted">
+                        ${msg.Nombre_del_usuario} - ${msg.Fecha}
+                    </div>
+                    <div>${msg.Mensaje}</div>
+                </div>
+            `;
+            container.insertAdjacentHTML('beforeend', html);
+        }
+    });
+    
+    propuestas.forEach(prop => {
+        // Verificar si la propuesta ya existe para no duplicar
+        if (!document.querySelector(`.propuesta-card[data-id="propuesta-${prop.Id_propuesta}"]`)) {
+            const esComprador = <?php echo $userId; ?> == prop.Id_comprador;
+            const botonesAccion = esComprador && prop.Estado === 'pendiente' ? `
+                <form method="POST" class="mt-3">
+                    <input type="hidden" name="propuesta_id" value="${prop.Id_propuesta}">
+                    <input type="hidden" name="conversacion_id" value="<?php echo $conversacionActual; ?>">
+                    <button type="submit" name="aceptar_propuesta" class="btn btn-sm btn-success me-2">
+                        <i class="fas fa-check"></i> Aceptar
+                    </button>
+                    <button type="submit" name="rechazar_propuesta" class="btn btn-sm btn-danger">
+                        <i class="fas fa-times"></i> Rechazar
+                    </button>
+                </form>
+            ` : '';
+            
+            const badgeColor = prop.Estado === 'aceptada' ? 'success' : 
+                             (prop.Estado === 'rechazada' ? 'danger' : 'warning');
+            
+            const html = `
+                <div class="propuesta-card card mb-3 ${prop.Estado}" data-id="propuesta-${prop.Id_propuesta}">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="card-title mb-0">
+                                <i class="fas fa-file-invoice-dollar me-2"></i>
+                                Cotización: ${prop.nombre_producto}
+                            </h6>
+                            <span class="badge bg-${badgeColor}">
+                                ${prop.Estado.charAt(0).toUpperCase() + prop.Estado.slice(1)}
+                            </span>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-4">
+                                <small class="text-muted">Cantidad:</small>
+                                <div>${prop.Cantidad}</div>
+                            </div>
+                            <div class="col-md-4">
+                                <small class="text-muted">Precio unitario:</small>
+                                <div>$${parseFloat(prop.Precio_propuesto).toFixed(2)}</div>
+                            </div>
+                            <div class="col-md-4">
+                                <small class="text-muted">Total:</small>
+                                <div>$${(prop.Cantidad * prop.Precio_propuesto).toFixed(2)}</div>
+                            </div>
+                        </div>
+                        
+                        ${botonesAccion}
+                    </div>
+                </div>
+            `;
+            container.insertAdjacentHTML('beforeend', html);
+        }
+    });
+}
+        // Actualizar cada 5 segundos
+        setInterval(cargarNuevosMensajes, 5000);
+    </script>
 </body>
 </html>

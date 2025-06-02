@@ -140,7 +140,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <label for="username" class="form-label fw-bold required-field">Nombre de usuario</label>
                             <input type="text" class="form-control" id="username" name="username" 
                                    value="<?php echo isset($_POST['username']) ? htmlspecialchars($_POST['username']) : ''; ?>" required>
-                            <div class="form-text">Entre 4 y 20 caracteres</div>
                         </div>
                         
                         <div class="col-md-6 mb-3">
@@ -151,34 +150,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </div>
                     
                     <div class="row">
-                        <div class="col-md-4 mb-3">
-                            <label for="nombre" class="form-label fw-bold required-field">Nombre</label>
-                            <input type="text" class="form-control" id="nombre" name="nombre" 
-                                   value="<?php echo isset($_POST['nombre']) ? htmlspecialchars($_POST['nombre']) : ''; ?>" required>
-                        </div>
+                         <div class="col-md-4 mb-3">
+                                <label for="nombre" class="form-label fw-bold required-field">Nombre</label>
+                                <input type="text" class="form-control" id="nombre" name="nombre" 
+                                    value="<?php echo isset($_POST['nombre']) ? htmlspecialchars($_POST['nombre']) : ''; ?>" 
+                                    required
+                                    pattern="[A-Za-zÁÉÍÓÚáéíóúÑñ\s]+"
+                                    title="Solo letras y espacios">
+                            </div>
                         
                         <div class="col-md-4 mb-3">
                             <label for="apellido_paterno" class="form-label fw-bold required-field">Apellido paterno</label>
                             <input type="text" class="form-control" id="apellido_paterno" name="apellido_paterno" 
-                                   value="<?php echo isset($_POST['apellido_paterno']) ? htmlspecialchars($_POST['apellido_paterno']) : ''; ?>" required>
+                                   value="<?php echo isset($_POST['apellido_paterno']) ? htmlspecialchars($_POST['apellido_paterno']) : ''; ?>" required
+                                    pattern="[A-Za-zÁÉÍÓÚáéíóúÑñ\s]+"
+                                    title="Solo letras y espacios">
                         </div>
                         
                         <div class="col-md-4 mb-3">
-                            <label for="apellido_materno" class="form-label fw-bold">Apellido materno</label>
+                            <label for="apellido_materno" class="form-label fw-bold required-field">Apellido materno</label>
                             <input type="text" class="form-control" id="apellido_materno" name="apellido_materno" 
-                                   value="<?php echo isset($_POST['apellido_materno']) ? htmlspecialchars($_POST['apellido_materno']) : ''; ?>">
+                                   value="<?php echo isset($_POST['apellido_materno']) ? htmlspecialchars($_POST['apellido_materno']) : ''; ?>"required
+                                    pattern="[A-Za-zÁÉÍÓÚáéíóúÑñ\s]+"
+                                    title="Solo letras y espacios">
                         </div>
                     </div>
                     
                     <div class="row">
                         <div class="col-md-6 mb-3">
                             <label for="password" class="form-label fw-bold required-field">Contraseña</label>
-                            <input type="password" class="form-control" id="password" name="password" required>
+                            <input type="password" class="form-control" id="password" name="password" 
+                                required minlength="8"
+                                title="La contraseña debe tener al menos 8 caracteres">
                             <div class="form-text">Mínimo 8 caracteres</div>
                         </div>
                         <div class="col-md-6 mb-3">
                             <label for="confirmPassword" class="form-label fw-bold required-field">Confirmar contraseña</label>
-                            <input type="password" class="form-control" id="confirmPassword" name="confirmPassword" required>
+                            <input type="password" class="form-control" id="confirmPassword" name="confirmPassword" 
+                                required minlength="8"
+                                title="La contraseña debe tener al menos 8 caracteres">
                         </div>
                     </div>
                     <div class="row">
@@ -209,7 +219,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <label for="avatar" class="form-label fw-bold">Avatar</label>
                         <div class="d-flex align-items-center gap-4">
                             <img id="avatarPreview" src="https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png" alt="Preview" class="avatar-preview">
-                            <input type="file" class="form-control" id="avatar" name="avatar" accept="image/*">
+                            <input type="file" class="form-control" id="avatar" name="avatar" accept="image/*" required>
                         </div>
                     </div>                    
                     <button type="submit" class="btn btn-amazon w-100 py-2 mb-3">Crear cuenta</button>

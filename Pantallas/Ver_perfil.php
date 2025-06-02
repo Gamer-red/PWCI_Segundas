@@ -170,7 +170,7 @@ try {
                                 <?php if ($list['Descripcion_lista']): ?>
                                     <p class="card-text text-muted"><?php echo htmlspecialchars($list['Descripcion_lista']); ?></p>
                                 <?php endif; ?>
-                                <a href="Listas_publicas.php?id=<?php echo $list['Id_lista']; ?>" class="btn btn-outline-primary btn-sm">Ver lista</a>
+                                <a href="ver_lista.php?id=<?php echo $list['Id_lista']; ?>" class="btn btn-outline-primary btn-sm">Ver lista</a>
                             </div>
                         </div>
                     </div>

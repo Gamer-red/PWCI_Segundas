@@ -145,7 +145,7 @@ $conn = null;
     <nav class="navbar navbar-expand-lg navbar-dark navbar-custom">
         <div class="container-fluid">
             <!-- Logo -->
-            <a class="navbar-brand" href="Pagina_principal.php">
+            <a class="navbar-brand">
                 <i class="fas fa-shopping-bag me-2"></i>TuTiendaOnline
             </a>
             
@@ -156,13 +156,15 @@ $conn = null;
             
             <!-- Contenido del navbar -->
             <div class="collapse navbar-collapse" id="navbarContent">
-                <!-- Barra de búsqueda -->
-               <form class="d-flex search-box mx-lg-3 my-2 my-lg-0" action="busqueda.php" method="get">
-                    <input class="form-control me-2" type="search" name="q" placeholder="Buscar productos o usuarios..." aria-label="Search" required>
+                <!-- Barra de búsqueda (solo para compradores) -->
+                <?php if(isset($_SESSION['Id_usuario']) && $esComprador): ?>
+                <form class="d-flex search-box mx-lg-3 my-2 my-lg-0" action="busqueda.php" method="get">
+                    <input class="form-control me-2" type="search" name="q" placeholder="Buscar productos..." aria-label="Search" required>
                     <button class="btn search-btn" type="submit">
                         <i class="fas fa-search"></i>
                     </button>
                 </form>
+                <?php endif; ?>
                 
                 <!-- Menú de navegación -->
                 <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
@@ -185,8 +187,7 @@ $conn = null;
                                     <i class="fas fa-user-shield me-1"></i> Panel Admin
                                 </a>
                             </li>
-                        <?php endif; ?>
-                        
+                        <?php endif; ?>                    
                         <?php if($esVendedor): ?>
                             <!-- Menú para VENDEDORES (rol 2) -->
                             <li class="nav-item dropdown">
@@ -194,9 +195,8 @@ $conn = null;
                                     <i class="fas fa-store me-1"></i> Mi Tienda
                                 </a>
                                 <ul class="dropdown-menu" aria-labelledby="vendedorDropdown">
-                                    <li><a class="dropdown-item" href="Perfil_usuario.php"><i class="fas fa-user me-2"></i>Perfil</a></li>
-                                    <li><a class="dropdown-item" href="mis_productos.php"><i class="fas fa-boxes me-2"></i>Mis Productos</a></li>
-                                    <li><a class="dropdown-item" href="ventas.php"><i class="fas fa-chart-line me-2"></i>Ventas</a></li>
+                                    <li><a class="dropdown-item" href="Perfil_usuario.php"><i class="fas fa-user me-2"></i>Mi Perfil</a></li>
+                                    <li><a class="dropdown-item" href="ResumenVentas.php"><i class="fas fa-chart-line me-2"></i>Ventas</a></li>
                                     <li><a class="dropdown-item" href="Inventario.php"><i class="fas fa-warehouse me-2"></i>Inventario</a></li>
                                     <li><a class="dropdown-item" href="Nueva_categoria.php"><i class="fas fa-plus-circle me-2"></i>Nueva Categoría</a></li>
                                     <li><hr class="dropdown-divider"></li>
@@ -204,37 +204,33 @@ $conn = null;
                                 </ul>
                             </li>
                         <?php elseif($esComprador): ?>
-                            <!-- Menú para COMPRADORES (rol 1) -->
-                            <li class="nav-item">
-                                <a class="nav-link" href="Mis_compras.php">
-                                    <i class="fas fa-shopping-bag me-1"></i> Mis Compras
+                            <!-- Menú para COMPRADORES (rol 1) - REORGANIZADO -->
+                            <li class="nav-item dropdown">
+                                <a class="nav-link dropdown-toggle" href="#" id="comprasDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                    <i class="fas fa-shopping-cart me-1"></i> Compras
                                 </a>
-                            </li>
-                            
-                            <li class="nav-item">
-                                <a class="nav-link" href="Listas.php">
-                                    <i class="fas fa-list me-1"></i> Mis Listas
-                                </a>
-                            </li>
-
-                            <li class="nav-item">
-                               <a class="nav-link" href="Detalle_carrito.php">
-                                    <i class="fas fa-shopping-cart"></i> Carrito
-                                    <?php if (isset($_SESSION['cart']) && count($_SESSION['cart']) > 0): ?>
-                                        <span id="cart-count" class="badge bg-danger"><?php echo count($_SESSION['cart']); ?></span>
-                                    <?php endif; ?>
-                                </a>
+                                <ul class="dropdown-menu" aria-labelledby="comprasDropdown">
+                                    <li><a class="dropdown-item" href="Pagina_principal.php"><i class="fas fa-home me-2"></i>Inicio</a></li>
+                                    <li><a class="dropdown-item" href="Perfil_usuario.php"><i class="fas fa-user me-2"></i>Mi Perfil</a></li>
+                                    <li><a class="dropdown-item" href="Mis_compras.php"><i class="fas fa-shopping-bag me-2"></i>Mis Compras</a></li>
+                                    <li><a class="dropdown-item" href="Detalle_carrito.php">
+                                        <i class="fas fa-shopping-cart me-2"></i>Carrito
+                                    </a></li>
+                                    <li><a class="dropdown-item" href="Chat.php"><i class="fas fa-comments me-2"></i>Chat</a></li>
+                                    <li class="dropdown-divider"></li>
+                                    <li class="dropdown-header">Listas</li>
+                                    <li><a class="dropdown-item" href="Listas.php"><i class="fas fa-list-ul me-2"></i>Mis Listas</a></li>
+                                    <li><a class="dropdown-item" href="Listas_publicas.php"><i class="fas fa-globe me-2"></i>Listas Públicas</a></li>
+                                </ul>
                             </li>
                         <?php endif; ?>
                         
-                        <!-- Elementos comunes a todos los usuarios -->
+                        <!-- Menú de perfil para todos los usuarios -->
                         <li class="nav-item dropdown">
                             <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                                <i class="fas fa-user-cog me-1"></i> Cuenta
+                                <i class="fas fa-user-circle me-1"></i> Perfil
                             </a>
                             <ul class="dropdown-menu" aria-labelledby="userDropdown">
-                                <li><a class="dropdown-item" href="Perfil_usuario.php"><i class="fas fa-user me-2"></i>Perfil</a></li>
-                                <li><a class="dropdown-item" href="configuracion.php"><i class="fas fa-cog me-2"></i>Configuración</a></li>
                                 <li><hr class="dropdown-divider"></li>
                                 <li><a class="dropdown-item" href="logout.php"><i class="fas fa-sign-out-alt me-2"></i>Cerrar sesión</a></li>
                             </ul>

@@ -17,6 +17,15 @@ $stmtCartList = $conn->prepare($sqlCartList);
 $stmtCartList->execute([$userId]);
 $cartList = $stmtCartList->fetch(PDO::FETCH_ASSOC);
 
+// Obtener los items del carrito para registrar las ventas
+$sqlCartItems = "SELECT pdl.Id_producto 
+                 FROM productos_de_lista pdl
+                 JOIN productos p ON pdl.Id_producto = p.Id_producto
+                 WHERE pdl.Id_lista = ? AND (p.Cotizar = 0 OR pdl.precio_unitario IS NOT NULL)";
+$stmtCartItems = $conn->prepare($sqlCartItems);
+$stmtCartItems->execute([$cartList['Id_lista']]);
+$cartItems = $stmtCartItems->fetchAll(PDO::FETCH_ASSOC);
+
 $transactionId = $_POST['paypal_order_id'] ?? null;
 $payerId = $_POST['paypal_payer_id'] ?? null;
 
@@ -45,6 +54,14 @@ try {
                         WHERE pdl.Id_lista = ? AND (p.Cotizar = 0 OR pdl.precio_unitario IS NOT NULL)";
     $stmtTicket = $conn->prepare($sqlInsertTicket);
     $stmtTicket->execute([$compraId, $cartList['Id_lista']]);
+
+    // Registrar cada producto vendido en la tabla ventas
+    foreach ($cartItems as $item) {
+        $sqlInsertVenta = "INSERT INTO ventas (Fecha_venta, Hora, Id_producto, Id_Usuario) 
+                          VALUES (?, ?, ?, ?)";
+        $stmtVenta = $conn->prepare($sqlInsertVenta);
+        $stmtVenta->execute([$date, $time, $item['Id_producto'], $userId]);
+    }
 
     $sqlUpdateStock = "UPDATE productos p
                        JOIN productos_de_lista pdl ON p.Id_producto = pdl.Id_producto

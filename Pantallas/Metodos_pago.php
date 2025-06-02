@@ -18,7 +18,6 @@ $stmtCartList->execute([$userId]);
 $cartList = $stmtCartList->fetch(PDO::FETCH_ASSOC);
 $cartItems = [];
 $total = 0;
-
 if ($cartList) {
     $sqlCartItems = "SELECT pdl.*, p.Nombre, p.Cotizar, p.Cantidad as stock, 
                     COALESCE(pdl.precio_unitario, p.Precio) as Precio_final
@@ -53,23 +52,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_payment'])) {
             $conn->beginTransaction();
 
             $sqlInsertCompra = "INSERT INTO compras (id_usuario, Fecha_compta, Hora_compra, Metodo_pago, Paypal_order_id, Paypal_payer_id) 
-                              VALUES (?, ?, ?, ?, ?, ?)";
+                            VALUES (?, ?, ?, ?, ?, ?)";
             $stmtCompra = $conn->prepare($sqlInsertCompra);
             $stmtCompra->execute([$userId, $date, $time, $method, $transactionId, $payerId]);
             $compraId = $conn->lastInsertId();
 
             $sqlInsertTicket = "INSERT INTO ticket_compra (Id_compra, Id_producto, Nombre, Cantidad, Precio_unitario)
-                               SELECT ?, pdl.Id_producto, p.Nombre, pdl.cantidad, COALESCE(pdl.precio_unitario, p.Precio)
-                               FROM productos_de_lista pdl
-                               JOIN productos p ON pdl.Id_producto = p.Id_producto
-                               WHERE pdl.Id_lista = ? AND (p.Cotizar = 0 OR pdl.precio_unitario IS NOT NULL)";
+                            SELECT ?, pdl.Id_producto, p.Nombre, pdl.cantidad, COALESCE(pdl.precio_unitario, p.Precio)
+                            FROM productos_de_lista pdl
+                            JOIN productos p ON pdl.Id_producto = p.Id_producto
+                            WHERE pdl.Id_lista = ? AND (p.Cotizar = 0 OR pdl.precio_unitario IS NOT NULL)";
             $stmtTicket = $conn->prepare($sqlInsertTicket);
             $stmtTicket->execute([$compraId, $cartList['Id_lista']]);
 
+            // Registrar cada producto vendido en la tabla ventas
+            foreach ($cartItems as $item) {
+                $sqlInsertVenta = "INSERT INTO ventas (Fecha_venta, Hora, Id_producto, Id_Usuario) 
+                                VALUES (?, ?, ?, ?)";
+                $stmtVenta = $conn->prepare($sqlInsertVenta);
+                $stmtVenta->execute([$date, $time, $item['Id_producto'], $userId]);
+            }
+
             $sqlUpdateStock = "UPDATE productos p
-                              JOIN productos_de_lista pdl ON p.Id_producto = pdl.Id_producto
-                              SET p.Cantidad = p.Cantidad - pdl.cantidad
-                              WHERE pdl.Id_lista = ?";
+                            JOIN productos_de_lista pdl ON p.Id_producto = pdl.Id_producto
+                            SET p.Cantidad = p.Cantidad - pdl.cantidad
+                            WHERE pdl.Id_lista = ?";
             $stmtUpdateStock = $conn->prepare($sqlUpdateStock);
             $stmtUpdateStock->execute([$cartList['Id_lista']]);
 
@@ -87,6 +94,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_payment'])) {
             header('Location: Metodos_pago.php');
             exit();
         }
+
     }
 }
 ?>
@@ -143,15 +151,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_payment'])) {
                                     <label class="form-check-label" for="creditCardMethod">Tarjeta de crédito</label>
                                 </div>
 
-                                <div id="creditCardForm" class="mb-3">
-                                    <input type="text" name="cardNumber" class="form-control mb-2" placeholder="Número de tarjeta" required>
+                               <div id="creditCardForm" class="mb-3">
+                                    <input type="text" name="cardNumber" class="form-control mb-2" placeholder="Número de tarjeta" 
+                                        required inputmode="numeric" pattern="\d*">
+                                        
                                     <input type="text" name="cardName" class="form-control mb-2" placeholder="Nombre en tarjeta" required>
+
                                     <div class="row">
                                         <div class="col">
-                                            <input type="text" name="cardExpiry" class="form-control mb-2" placeholder="MM/AA" required>
+                                            <input type="text" name="cardExpiry" class="form-control mb-2" placeholder="MM/AA" 
+                                                required inputmode="numeric" pattern="\d*">
                                         </div>
                                         <div class="col">
-                                            <input type="text" name="cardCvv" class="form-control mb-2" placeholder="CVV" required>
+                                            <input type="text" name="cardCvv" class="form-control mb-2" placeholder="CVV" 
+                                                required inputmode="numeric" pattern="\d*">
                                         </div>
                                     </div>
                                 </div>
@@ -179,7 +192,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_payment'])) {
     <script>
         const total = <?= number_format($total, 2, '.', '') ?>;
     </script>
-    <script src="https://www.paypal.com/sdk/js?client-id=ASa6CdpEqZsGXj6bkiTvi4_uaKofdqbeJ81QWooGnwIxHF9z34xHD2T10TtdHAcutUvU2mtZb5NhBLsD&currency=USD&components=buttons"></script>
+    <script src="https://www.paypal.com/sdk/js?client-id=ASa6CdpEqZsGXj6bkiTvi4_uaKofdqbeJ81QWooGnwIxHF9z34xHD2T10TtdHAcutUvU2mtZb5NhBLsD&currency=USD&components=buttons&disable-funding=card"></script>
 
     <script src="../JS/Detalle_carrito.js"></script>
 </body>

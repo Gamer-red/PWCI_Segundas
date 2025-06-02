@@ -19,20 +19,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         if ($_POST['type'] === 'category') {
             $stmt = $conn->prepare("UPDATE categorias SET autorizado = ? WHERE Id_categoria = ?");
-            $value = ($action === 'approve') ? 1 : 0;
+            $value = ($action === 'approve') ? 1 : -1; // Cambiado a -1 para rechazo
             $stmt->execute([$value, $id]);
         } elseif ($_POST['type'] === 'product') {
             $stmt = $conn->prepare("UPDATE productos SET autorizado = ? WHERE Id_producto = ?");
-            $value = ($action === 'approve') ? 1 : 0;
+            $value = ($action === 'approve') ? 1 : -1; // Cambiado a -1 para rechazo
             $stmt->execute([$value, $id]);
         }
         
-        // Recargar la página para ver los cambios
         header("Location: admin_panel.php");
         exit();
     }
 }
-
 // Obtener categorías pendientes de aprobación
 $stmt = $conn->query("SELECT c.*, u.Nombre_del_usuario 
                      FROM categorias c 
@@ -122,17 +120,16 @@ $pendingProducts = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         <table class="table table-hover">
                             <thead class="table-dark">
                                 <tr>
-                                    <th>ID</th>
+                                 
                                     <th>Nombre</th>
                                     <th>Creada por</th>
-                                    <th>Fecha</th>
                                     <th>Acciones</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <?php foreach ($pendingCategories as $category): ?>
                                     <tr>
-                                        <td><?php echo htmlspecialchars($category['Id_categoria']); ?></td>
+                                        
                                         <td><?php echo htmlspecialchars($category['Nombre_categoria']); ?></td>
                                         <td><?php echo htmlspecialchars($category['Nombre_del_usuario']); ?></td>
                                         <td>
@@ -193,9 +190,7 @@ $pendingProducts = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                                     <i class="fas fa-times"></i> Rechazar
                                                 </button>
                                             </form>
-                                            <a href="producto_detalle.php?id=<?php echo $product['Id_producto']; ?>" class="btn btn-sm btn-info" target="_blank">
-                                                <i class="fas fa-eye"></i> Ver
-                                            </a>
+                                           
                                         </td>
                                     </tr>
                                 <?php endforeach; ?>

@@ -186,3 +186,6 @@
     border-color: #ffecb5;
     color: #664d03;
 }
+#listDescription {
+    resize: none;
+  }

@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Servidor: 127.0.0.1:3307:3307
--- Tiempo de generación: 26-05-2025 a las 03:41:33
+-- Tiempo de generación: 02-06-2025 a las 04:59:55
 -- Versión del servidor: 10.4.32-MariaDB
 -- Versión de PHP: 8.2.12
 
@@ -145,7 +145,8 @@ CREATE TABLE `productos` (
   `Cotizar` tinyint(1) DEFAULT NULL,
   `Precio` float DEFAULT NULL,
   `Cantidad` int(11) DEFAULT NULL,
-  `autorizado` tinyint(1) DEFAULT 0
+  `autorizado` tinyint(1) DEFAULT 0,
+  `descripcion` varchar(255) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
@@ -161,8 +162,29 @@ CREATE TABLE `productos_de_lista` (
   `id_usuario` int(11) DEFAULT NULL,
   `fecha_actualizacion` date DEFAULT NULL,
   `hora_actualizacion` time DEFAULT NULL,
-  `cantidad` int(11) DEFAULT 1
+  `cantidad` int(11) DEFAULT 1,
+  `precio_unitario` decimal(10,2) DEFAULT NULL,
+  `es_cotizacion` tinyint(1) DEFAULT 0,
+  `id_propuesta` int(11) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Estructura de tabla para la tabla `propuestas_cotizacion`
+--
+
+CREATE TABLE `propuestas_cotizacion` (
+  `Id_propuesta` int(11) NOT NULL,
+  `Id_conversacion` int(11) NOT NULL,
+  `Id_producto` int(11) NOT NULL,
+  `Id_vendedor` int(11) NOT NULL,
+  `Id_comprador` int(11) NOT NULL,
+  `Cantidad` int(11) NOT NULL,
+  `Precio_propuesto` decimal(10,2) NOT NULL,
+  `Fecha_propuesta` datetime NOT NULL DEFAULT current_timestamp(),
+  `Estado` enum('pendiente','aceptada','rechazada') NOT NULL DEFAULT 'pendiente'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
 
@@ -306,7 +328,18 @@ ALTER TABLE `productos_de_lista`
   ADD PRIMARY KEY (`id_productos_de_lista`),
   ADD KEY `fk_id_lista` (`Id_lista`),
   ADD KEY `fk_id_producto` (`Id_producto`),
-  ADD KEY `fk_id_usuario` (`id_usuario`);
+  ADD KEY `fk_id_usuario` (`id_usuario`),
+  ADD KEY `fk_propuesta` (`id_propuesta`);
+
+--
+-- Indices de la tabla `propuestas_cotizacion`
+--
+ALTER TABLE `propuestas_cotizacion`
+  ADD PRIMARY KEY (`Id_propuesta`),
+  ADD KEY `Id_conversacion` (`Id_conversacion`),
+  ADD KEY `Id_producto` (`Id_producto`),
+  ADD KEY `Id_vendedor` (`Id_vendedor`),
+  ADD KEY `Id_comprador` (`Id_comprador`);
 
 --
 -- Indices de la tabla `rol`
@@ -402,6 +435,12 @@ ALTER TABLE `productos_de_lista`
   MODIFY `id_productos_de_lista` int(11) NOT NULL AUTO_INCREMENT;
 
 --
+-- AUTO_INCREMENT de la tabla `propuestas_cotizacion`
+--
+ALTER TABLE `propuestas_cotizacion`
+  MODIFY `Id_propuesta` int(11) NOT NULL AUTO_INCREMENT;
+
+--
 -- AUTO_INCREMENT de la tabla `rol`
 --
 ALTER TABLE `rol`
@@ -494,7 +533,17 @@ ALTER TABLE `productos`
 ALTER TABLE `productos_de_lista`
   ADD CONSTRAINT `fk_id_lista` FOREIGN KEY (`Id_lista`) REFERENCES `lista` (`Id_lista`),
   ADD CONSTRAINT `fk_id_producto` FOREIGN KEY (`Id_producto`) REFERENCES `productos` (`Id_producto`),
-  ADD CONSTRAINT `fk_id_usuario` FOREIGN KEY (`id_usuario`) REFERENCES `usuarios` (`Id_usuario`);
+  ADD CONSTRAINT `fk_id_usuario` FOREIGN KEY (`id_usuario`) REFERENCES `usuarios` (`Id_usuario`),
+  ADD CONSTRAINT `fk_propuesta` FOREIGN KEY (`id_propuesta`) REFERENCES `propuestas_cotizacion` (`Id_propuesta`);
+
+--
+-- Filtros para la tabla `propuestas_cotizacion`
+--
+ALTER TABLE `propuestas_cotizacion`
+  ADD CONSTRAINT `propuestas_cotizacion_ibfk_1` FOREIGN KEY (`Id_conversacion`) REFERENCES `conversacion` (`Id_conversacion`),
+  ADD CONSTRAINT `propuestas_cotizacion_ibfk_2` FOREIGN KEY (`Id_producto`) REFERENCES `productos` (`Id_producto`),
+  ADD CONSTRAINT `propuestas_cotizacion_ibfk_3` FOREIGN KEY (`Id_vendedor`) REFERENCES `usuarios` (`Id_usuario`),
+  ADD CONSTRAINT `propuestas_cotizacion_ibfk_4` FOREIGN KEY (`Id_comprador`) REFERENCES `usuarios` (`Id_usuario`);
 
 --
 -- Filtros para la tabla `ticket_compra`

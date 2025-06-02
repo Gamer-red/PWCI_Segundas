@@ -78,12 +78,12 @@ $totalRatings = $rating['total'] ?? 0;
 // Obtener listas del usuario si está logueado
 $listasUsuario = []; 
 if (isset($_SESSION['Id_usuario'])) {
-    $sqlListas = "SELECT Id_lista, Nombre_lista 
-                  FROM lista 
-                  WHERE Id_usuario = ? 
-                  AND Nombre_lista NOT IN ('Carrito', 'Lista de deseos')";
+    $sqlListas = "SELECT l.Id_lista, l.Nombre_lista, u.Nombre_del_usuario as creador 
+                  FROM lista l
+                  JOIN usuarios u ON l.Id_usuario = u.Id_usuario
+                  WHERE l.Nombre_lista NOT IN ('Carrito', 'Lista de deseos')";
     $stmtListas = $conn->prepare($sqlListas);
-    $stmtListas->execute([$_SESSION['Id_usuario']]);
+    $stmtListas->execute();
     $listasUsuario = $stmtListas->fetchAll(PDO::FETCH_ASSOC);
 }
 
@@ -95,6 +95,15 @@ if (isset($_SESSION['Id_usuario'])) {
     $stmtCheckReview = $conn->prepare($sqlCheckReview);
     $stmtCheckReview->execute([$productoId, $_SESSION['Id_usuario']]);
     $usuarioYaComento = $stmtCheckReview->fetchColumn() > 0;
+}
+$usuarioHaComprado = false;
+if (isset($_SESSION['Id_usuario'])) {
+    $sqlCheckCompra = "SELECT COUNT(*) FROM compras c
+                       JOIN ticket_compra t ON c.Id_compra = t.Id_compra
+                       WHERE c.id_usuario = ? AND t.Id_producto = ?";
+    $stmtCheckCompra = $conn->prepare($sqlCheckCompra);
+    $stmtCheckCompra->execute([$_SESSION['Id_usuario'], $productoId]);
+    $usuarioHaComprado = $stmtCheckCompra->fetchColumn() > 0;
 }
 
 // Procesar solicitud de cotización si se envió
@@ -280,7 +289,10 @@ $conversacionExistente = $stmtCheckConversacion->fetch(PDO::FETCH_ASSOC);
                             <ul class="dropdown-menu" aria-labelledby="dropdownMenuButton">
                                 <?php if (!empty($listasUsuario)): ?>
                                     <?php foreach ($listasUsuario as $lista): ?>
-                                        <li><a class="dropdown-item" href="#" onclick="addToList(<?php echo $producto['Id_producto']; ?>, <?php echo $lista['Id_lista']; ?>)"><?php echo htmlspecialchars($lista['Nombre_lista']); ?></a></li>
+                                        <li><a class="dropdown-item" href="#" onclick="addToList(<?php echo $producto['Id_producto']; ?>, <?php echo $lista['Id_lista']; ?>)">
+                                            <?php echo htmlspecialchars($lista['Nombre_lista']); ?> 
+                                            <small class="text-muted">(de <?php echo htmlspecialchars($lista['creador']); ?>)</small>
+                                        </a></li>
                                     <?php endforeach; ?>
                                 <?php else: ?>
                                     <li><a class="dropdown-item" href="#" onclick="alert('No tienes listas creadas. Por favor, crea una lista primero.');">No tienes listas</a></li>
@@ -311,8 +323,8 @@ $conversacionExistente = $stmtCheckConversacion->fetch(PDO::FETCH_ASSOC);
                                         <input type="text" class="form-control" id="listName" required>
                                     </div>
                                     <div class="mb-3">
-                                        <label for="listDescription" class="form-label">Descripción (opcional)</label>
-                                        <textarea class="form-control" id="listDescription" rows="3"></textarea>
+                                        <label for="listDescription" class="form-label">Descripción</label>
+                                        <textarea class="form-control" id="listDescription" rows="3" required></textarea>
                                     </div>
                                     <input type="hidden" id="productId" value="<?php echo $producto['Id_producto']; ?>">
                                 </form>
@@ -325,20 +337,25 @@ $conversacionExistente = $stmtCheckConversacion->fetch(PDO::FETCH_ASSOC);
                     </div>
                 </div>
                 
-                <div class="card mb-4">
+               <div class="card mb-4">
                     <div class="card-header">
                         <h5 class="mb-0"><i class="fas fa-info-circle feature-icon"></i>Descripción</h5>
                     </div>
                     <div class="card-body">
                         <p class="card-text">
                             <?php 
-                            $descripcion = "Descripción detallada no disponible. Contacta al vendedor para más información.";
-                            echo htmlspecialchars($descripcion); 
+                            $descripcion = !empty($producto['descripcion']) ? $producto['descripcion'] : 
+                                        "Descripción detallada no disponible. Contacta al vendedor para más información.";
+                            echo nl2br(htmlspecialchars($descripcion)); 
                             ?>
                         </p>
                     </div>
-                </div>
-                
+                </div>        <!-- Aviso para usuarios que compraron pero no comentaron -->
+                <?php if ($usuarioHaComprado && !$usuarioYaComento): ?>
+                    <div class="alert alert-info">
+                        ¡Has comprado este producto! ¿Quieres dejar un comentario o calificación?
+                    </div>
+                <?php endif; ?>
                 <!-- Sección de comentarios y valoraciones -->
                 <div class="card mb-4">
                     <div class="card-header">
@@ -394,47 +411,8 @@ $conversacionExistente = $stmtCheckConversacion->fetch(PDO::FETCH_ASSOC);
                             <p class="text-muted">Aún no hay comentarios para este producto.</p>
                         <?php endif; ?>
                     </div>
-                </div>
-                
-                <!-- Formulario para dejar comentario/valoración -->
-                <?php if (isset($_SESSION['Id_usuario']) && !$usuarioYaComento): ?>
-                    <div class="review-form-container">
-                        <h5><i class="fas fa-edit feature-icon"></i>Deja tu valoración</h5>
-                        <form id="reviewForm" method="post" action="submit_review.php">
-                            <input type="hidden" name="product_id" value="<?php echo $productoId; ?>">
-                            
-                            <div class="mb-3">
-                                <label class="form-label">Calificación:</label>
-                                <div class="star-rating">
-                                    <i class="far fa-star" data-rating="1"></i>
-                                    <i class="far fa-star" data-rating="2"></i>
-                                    <i class="far fa-star" data-rating="3"></i>
-                                    <i class="far fa-star" data-rating="4"></i>
-                                    <i class="far fa-star" data-rating="5"></i>
-                                    <input type="hidden" name="rating" id="ratingValue" required>
-                                </div>
-                            </div>
-                            
-                            <div class="mb-3">
-                                <label for="comment" class="form-label">Comentario:</label>
-                                <textarea class="form-control" id="comment" name="comment" rows="3" required minlength="10"></textarea>
-                                <small class="text-muted">Mínimo 10 caracteres</small>
-                            </div>
-                            
-                            <button type="submit" class="btn btn-primary">
-                                <i class="fas fa-paper-plane"></i> Enviar valoración
-                            </button>
-                        </form>
-                    </div>
-                <?php elseif (isset($_SESSION['Id_usuario']) && $usuarioYaComento): ?>
-                    <div class="alert alert-info">
-                        <i class="fas fa-info-circle"></i> Ya has dejado un comentario para este producto.
-                    </div>
-                <?php else: ?>
-                    <div class="alert alert-warning">
-                        <i class="fas fa-exclamation-circle"></i> <a href="Login.php">Inicia sesión</a> para dejar un comentario y valoración.
-                    </div>
-                <?php endif; ?>
+                </div> 
+              
             </div>
         </div>
     </div>

@@ -207,6 +207,9 @@ foreach ($ticketItems as $item) {
             color: #28a745;
             font-weight: bold;
         }
+        textarea {
+        resize: none;
+        }
     </style>
 </head>
 <body>
@@ -310,7 +313,7 @@ foreach ($ticketItems as $item) {
                                         
                                         <div class="mb-3">
                                             <label for="comment-<?php echo $productId; ?>" class="form-label">Comentario:</label>
-                                            <textarea class="form-control" id="comment-<?php echo $productId; ?>" name="comment" rows="3" required minlength="10"></textarea>
+                                            <textarea class="form-control" id="comment-<?php echo $productId; ?>" name="comment" rows="3" required minlength="10" style="resize: none;"></textarea>
                                             <small class="text-muted">Mínimo 10 caracteres</small>
                                         </div>
                                         

@@ -25,53 +25,109 @@ $listas = $stmtListas->fetchAll(PDO::FETCH_ASSOC);
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['action'])) {
         try {
-            if ($_POST['action'] === 'delete_list' && isset($_POST['list_id'])) {
-                // Eliminar lista y sus productos
-                $conn->beginTransaction();
-                
-                // Primero eliminar los productos de la lista
-                $sqlDeleteProducts = "DELETE FROM productos_de_lista WHERE Id_lista = ?";
-                $stmtDeleteProducts = $conn->prepare($sqlDeleteProducts);
-                $stmtDeleteProducts->execute([$_POST['list_id']]);
-                
-                // Luego eliminar la lista
-                $sqlDeleteList = "DELETE FROM lista WHERE Id_lista = ? AND Id_usuario = ?";
-                $stmtDeleteList = $conn->prepare($sqlDeleteList);
-                $stmtDeleteList->execute([$_POST['list_id'], $userId]);
-                
-                $conn->commit();
-                $_SESSION['success_message'] = "Lista eliminada correctamente";
-                
-            } elseif ($_POST['action'] === 'remove_product' && isset($_POST['list_id']) && isset($_POST['product_id'])) {
-                // Eliminar producto de una lista
-                $sqlRemoveProduct = "DELETE FROM productos_de_lista 
-                                    WHERE Id_lista = ? AND Id_producto = ?";
-                $stmtRemoveProduct = $conn->prepare($sqlRemoveProduct);
-                $stmtRemoveProduct->execute([$_POST['list_id'], $_POST['product_id']]);
-                
-                $_SESSION['success_message'] = "Producto eliminado de la lista";
-            } elseif ($_POST['action'] === 'update_list' && isset($_POST['list_id'])) {
-                // Actualizar información de la lista
+            $conn->beginTransaction();
+
+            if ($_POST['action'] === 'create_list') {
+                // Crear nueva lista
                 $nombre = htmlspecialchars(trim($_POST['nombre']));
-                $descripcion = htmlspecialchars(trim($_POST['descripcion']));
-                
+                $descripcion = htmlspecialchars(trim($_POST['descripcion'] ?? ''));
+
                 if (empty($nombre)) {
                     throw new Exception("El nombre de la lista es requerido");
                 }
-                
-                $sqlUpdateList = "UPDATE lista 
-                                 SET Nombre_lista = ?, Descripcion_lista = ?
-                                 WHERE Id_lista = ? AND Id_usuario = ?";
-                $stmtUpdateList = $conn->prepare($sqlUpdateList);
-                $stmtUpdateList->execute([$nombre, $descripcion, $_POST['list_id'], $userId]);
-                
+
+                // Verifica nombres reservados
+                if (strtolower($nombre) === 'carrito' || strtolower($nombre) === 'lista de deseos') {
+                    throw new Exception("El nombre de la lista no puede ser 'Carrito' ni 'Lista de deseos'");
+                }
+
+                // Verificar si ya existe una lista con ese nombre
+                $sqlCheck = "SELECT COUNT(*) FROM lista WHERE Id_usuario = ? AND Nombre_lista = ?";
+                $stmtCheck = $conn->prepare($sqlCheck);
+                $stmtCheck->execute([$userId, $nombre]);
+                $exists = $stmtCheck->fetchColumn();
+
+                if ($exists > 0) {
+                    throw new Exception("Ya tienes una lista con ese nombre");
+                }
+
+                // Insertar nueva lista
+                $sqlInsert = "INSERT INTO lista (Id_usuario, Nombre_lista, Descripcion_lista) 
+                              VALUES (?, ?, ?)";
+                $stmtInsert = $conn->prepare($sqlInsert);
+                $stmtInsert->execute([$userId, $nombre, $descripcion]);
+
+                $_SESSION['success_message'] = "Lista creada correctamente";
+
+            } elseif ($_POST['action'] === 'update_list' && isset($_POST['list_id'])) {
+                $listId = $_POST['list_id'];
+                $nombre = htmlspecialchars(trim($_POST['nombre']));
+                $descripcion = htmlspecialchars(trim($_POST['descripcion'] ?? ''));
+
+                // Verificar que no sea la lista de deseos
+                $sqlCheckWishlist = "SELECT Nombre_lista FROM lista WHERE Id_lista = ?";
+                $stmtCheckWishlist = $conn->prepare($sqlCheckWishlist);
+                $stmtCheckWishlist->execute([$listId]);
+                $list = $stmtCheckWishlist->fetch(PDO::FETCH_ASSOC);
+
+                if ($list && $list['Nombre_lista'] === 'Lista de deseos') {
+                    throw new Exception("No puedes editar la lista de deseos");
+                }
+
+                // Verificar nombres reservados
+                if (strtolower($nombre) === 'carrito' || strtolower($nombre) === 'lista de deseos') {
+                    throw new Exception("Ese nombre está reservado. No puedes usarlo.");
+                }
+
+                // Actualizar lista
+                $sqlUpdate = "UPDATE lista SET Nombre_lista = ?, Descripcion_lista = ? WHERE Id_lista = ? AND Id_usuario = ?";
+                $stmtUpdate = $conn->prepare($sqlUpdate);
+                $stmtUpdate->execute([$nombre, $descripcion, $listId, $userId]);
+
                 $_SESSION['success_message'] = "Lista actualizada correctamente";
+
+            } elseif ($_POST['action'] === 'delete_list' && isset($_POST['list_id'])) {
+                $listId = $_POST['list_id'];
+
+                // Verificar que no sea la lista de deseos
+                $sqlCheckWishlist = "SELECT Nombre_lista FROM lista WHERE Id_lista = ?";
+                $stmtCheckWishlist = $conn->prepare($sqlCheckWishlist);
+                $stmtCheckWishlist->execute([$listId]);
+                $list = $stmtCheckWishlist->fetch(PDO::FETCH_ASSOC);
+
+                if ($list && $list['Nombre_lista'] === 'Lista de deseos') {
+                    throw new Exception("No puedes eliminar la lista de deseos");
+                }
+
+                // Eliminar productos de la lista
+                $sqlDeleteProducts = "DELETE FROM productos_de_lista WHERE Id_lista = ?";
+                $stmtDeleteProducts = $conn->prepare($sqlDeleteProducts);
+                $stmtDeleteProducts->execute([$listId]);
+
+                // Eliminar la lista
+                $sqlDeleteList = "DELETE FROM lista WHERE Id_lista = ? AND Id_usuario = ?";
+                $stmtDeleteList = $conn->prepare($sqlDeleteList);
+                $stmtDeleteList->execute([$listId, $userId]);
+
+                $_SESSION['success_message'] = "Lista eliminada correctamente";
+
+            } elseif ($_POST['action'] === 'remove_product' && isset($_POST['list_id']) && isset($_POST['product_id'])) {
+                $listId = $_POST['list_id'];
+                $productId = $_POST['product_id'];
+
+                $sqlRemove = "DELETE FROM productos_de_lista WHERE Id_lista = ? AND Id_producto = ?";
+                $stmtRemove = $conn->prepare($sqlRemove);
+                $stmtRemove->execute([$listId, $productId]);
+
+                $_SESSION['success_message'] = "Producto eliminado de la lista";
             }
-            
-            // Recargar la página para evitar reenvío del formulario
+
+            $conn->commit();
+
+            // Recargar página
             header("Location: Listas.php");
             exit();
-            
+
         } catch (Exception $e) {
             if ($conn->inTransaction()) {
                 $conn->rollBack();
@@ -82,7 +138,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 }
-
 // Obtener productos de una lista específica si se solicita
 $listaDetalle = null;
 $productosLista = [];
@@ -110,7 +165,6 @@ if (isset($_GET['view'])) {
     }
 }
 ?>
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -144,6 +198,13 @@ if (isset($_GET['view'])) {
             top: 10px;
             right: 10px;
         }
+         #listDescription {
+    resize: none;
+  }
+
+  #editListDescription{
+    resize: none;
+  }
     </style>
 </head>
 <body>
@@ -190,22 +251,24 @@ if (isset($_GET['view'])) {
             <!-- Vista detallada de una lista específica -->
             <div class="card mb-4">
                 <div class="card-header d-flex justify-content-between align-items-center">
-                    <div>
-                        <h2 class="mb-0"><?php echo htmlspecialchars($listaDetalle['Nombre_lista']); ?></h2>
-                        <?php if ($listaDetalle['Descripcion_lista']): ?>
-                            <p class="mb-0 text-muted"><?php echo htmlspecialchars($listaDetalle['Descripcion_lista']); ?></p>
-                        <?php endif; ?>
-                    </div>
-                    <div>
+                <div>
+                    <h2 class="mb-0"><?php echo htmlspecialchars($listaDetalle['Nombre_lista']); ?></h2>
+                    <?php if ($listaDetalle['Descripcion_lista']): ?>
+                        <p class="mb-0 text-muted"><?php echo htmlspecialchars($listaDetalle['Descripcion_lista']); ?></p>
+                    <?php endif; ?>
+                </div>
+                <div>
+                    <?php if ($listaDetalle['Nombre_lista'] !== 'Lista de deseos'): ?>
                         <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#editListModal" 
                                 onclick="setEditListData(<?php echo $listaDetalle['Id_lista']; ?>, '<?php echo addslashes($listaDetalle['Nombre_lista']); ?>', '<?php echo addslashes($listaDetalle['Descripcion_lista']); ?>')">
                             <i class="fas fa-edit"></i> Editar
                         </button>
-                        <a href="Listas.php" class="btn btn-sm btn-outline-primary">
-                            <i class="fas fa-arrow-left"></i> Volver
-                        </a>
-                    </div>
+                    <?php endif; ?>
+                    <a href="Listas.php" class="btn btn-sm btn-outline-primary">
+                        <i class="fas fa-arrow-left"></i> Volver
+                    </a>
                 </div>
+            </div>
                 
                 <div class="card-body">
                     <?php if (empty($productosLista)): ?>
@@ -253,11 +316,6 @@ if (isset($_GET['view'])) {
                                                        class="btn btn-sm btn-outline-primary" title="Ver producto">
                                                         <i class="fas fa-eye"></i>
                                                     </a>
-                                                    <button class="btn btn-sm btn-outline-danger" 
-                                                            onclick="removeProduct(<?php echo $listaDetalle['Id_lista']; ?>, <?php echo $producto['Id_producto']; ?>)" 
-                                                            title="Eliminar de la lista">
-                                                        <i class="fas fa-trash"></i>
-                                                    </button>
                                                     <?php if ($listaDetalle['Nombre_lista'] !== 'Lista de deseos'): ?>
                                                        
                                                     <?php endif; ?>
@@ -285,24 +343,22 @@ if (isset($_GET['view'])) {
                                             <i class="fas fa-ellipsis-v"></i>
                                         </button>
                                         <ul class="dropdown-menu">
-                                            <li>
-                                                <a class="dropdown-item" href="Listas.php?view=<?php echo $lista['Id_lista']; ?>">
-                                                    <i class="fas fa-eye me-2"></i>Ver
-                                                </a>
-                                            </li>
-                                            <li>
-                                                <a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#editListModal"
-                                                   onclick="setEditListData(<?php echo $lista['Id_lista']; ?>, '<?php echo addslashes($lista['Nombre_lista']); ?>', '<?php echo addslashes($lista['Descripcion_lista']); ?>')">
-                                                    <i class="fas fa-edit me-2"></i>Editar
-                                                </a>
-                                            </li>
-                                            <li><hr class="dropdown-divider"></li>
-                                            <li>
-                                                <button class="dropdown-item text-danger" 
-                                                        onclick="confirmDelete(<?php echo $lista['Id_lista']; ?>, '<?php echo addslashes($lista['Nombre_lista']); ?>')">
-                                                    <i class="fas fa-trash me-2"></i>Eliminar
-                                                </button>
-                                            </li>
+                                            
+                                            <?php if ($lista['Nombre_lista'] !== 'Lista de deseos'): ?>
+                                                <li>
+                                                    <a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#editListModal"
+                                                    onclick="setEditListData(<?php echo $lista['Id_lista']; ?>, '<?php echo addslashes($lista['Nombre_lista']); ?>', '<?php echo addslashes($lista['Descripcion_lista']); ?>')">
+                                                        <i class="fas fa-edit me-2"></i>Editar
+                                                    </a>
+                                                </li>
+                                                <li><hr class="dropdown-divider"></li>
+                                                <li>
+                                                    <button class="dropdown-item text-danger" 
+                                                            onclick="confirmDelete(<?php echo $lista['Id_lista']; ?>, '<?php echo addslashes($lista['Nombre_lista']); ?>')">
+                                                        <i class="fas fa-trash me-2"></i>Eliminar
+                                                    </button>
+                                                </li>
+                                            <?php endif; ?>
                                         </ul>
                                     </div>
                                 </div>
@@ -346,10 +402,11 @@ if (isset($_GET['view'])) {
                         <div class="mb-3">
                             <label for="listName" class="form-label">Nombre de la lista</label>
                             <input type="text" class="form-control" id="listName" name="nombre" required>
+                            <small class="text-muted">No puede llamarse "Carrito" o "Lista de deseos"</small>
                         </div>
                         <div class="mb-3">
-                            <label for="listDescription" class="form-label">Descripción (opcional)</label>
-                            <textarea class="form-control" id="listDescription" name="descripcion" rows="3"></textarea>
+                            <label for="listDescription" class="form-label">Descripción</label>
+                            <textarea class="form-control" id="listDescription" name="descripcion" rows="3" required></textarea>
                         </div>
                     </div>
                     <div class="modal-footer">
@@ -414,7 +471,6 @@ if (isset($_GET['view'])) {
             </div>
         </div>
     </div>
-    
     <!-- Bootstrap 5 JS Bundle with Popper -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
@@ -516,6 +572,53 @@ if (isset($_GET['view'])) {
                 alert('Error de conexión');
             });
         }
+
+    document.getElementById('createListForm').addEventListener('submit', function(e) {
+    const nombre = document.getElementById('listName').value.trim().toLowerCase();
+    const descripcion = document.getElementById('listDescription').value.trim();
+
+    // Reglas prohibidas
+    if (nombre === 'carrito' || nombre === 'lista de deseos') {
+        e.preventDefault();
+        alert('El nombre de la lista no puede ser "Carrito" ni "Lista de deseos".');
+        return;
+    }
+    // Validación adicional si quieres (por ejemplo, longitud mínima)
+});
+        // Función para crear nueva lista con AJAX (opcional)
+function createNewList() {
+    const listName = document.getElementById('listName').value;
+    const listDescription = document.getElementById('listDescription').value;
+    
+    if (!listName.trim()) {
+        alert('El nombre de la lista es requerido');
+        return;
+    }
+    
+    fetch('Listas.php', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: `action=create_list&nombre=${encodeURIComponent(listName)}&descripcion=${encodeURIComponent(listDescription)}`
+    })
+    .then(response => {
+        if (response.redirected) {
+            window.location.href = response.url;
+        } else {
+            return response.text();
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        
+    });
+}
+// Asignar el evento al formulario para evitar recarga de página si usas AJAX
+document.getElementById('createListForm')?.addEventListener('submit', function(e) {
+    e.preventDefault();
+    createNewList();
+});
     </script>
 </body>
 </html>

@@ -37,3 +37,40 @@
                 });
             }
         });
+ document.addEventListener('DOMContentLoaded', function() {
+            // Actualizar stock disponible cuando se selecciona un producto
+            const productoSelect = document.querySelector('select[name="producto_id"]');
+            const cantidadInput = document.querySelector('input[name="cantidad"]');
+            const stockDisplay = document.querySelector('.stock-display');
+            
+            if (productoSelect && cantidadInput && stockDisplay) {
+                productoSelect.addEventListener('change', function() {
+                    const selectedOption = this.options[this.selectedIndex];
+                    const stock = selectedOption.getAttribute('data-stock');
+                    stockDisplay.textContent = stock;
+                    cantidadInput.setAttribute('max', stock);
+                    cantidadInput.value = 1; // Resetear cantidad al cambiar producto
+                });
+                
+                // Validar cantidad al enviar el formulario
+                const cotizacionForm = document.getElementById('form-cotizacion').querySelector('form');
+                if (cotizacionForm) {
+                    cotizacionForm.addEventListener('submit', function(e) {
+                        const cantidad = parseInt(cantidadInput.value);
+                        const stock = parseInt(cantidadInput.getAttribute('max'));
+                        
+                        if (cantidad > stock) {
+                            e.preventDefault();
+                            alert('La cantidad no puede ser mayor al stock disponible (' + stock + ')');
+                            cantidadInput.focus();
+                        }
+                    });
+                }
+            }
+            
+            // Mostrar el stock inicial si ya hay un producto seleccionado
+            if (productoSelect.value) {
+                const event = new Event('change');
+                productoSelect.dispatchEvent(event);
+            }
+});

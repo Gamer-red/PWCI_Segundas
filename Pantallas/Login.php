@@ -66,6 +66,7 @@
             const result = await response.json();
 
             if (result.success) {
+    console.log("Respuesta exitosa:", result); // Agrega esto para depuración
     const successDiv = document.getElementById('success-message');
     successDiv.textContent = "Inicio de sesión exitoso. Redirigiendo...";
     successDiv.classList.remove('d-none');
@@ -73,9 +74,11 @@
     // Opcional: deshabilita el botón para evitar doble envío
     document.querySelector('button[type="submit"]').disabled = true;
 
+    console.log("Id_rol recibido:", result.data.Id_rol, "Tipo:", typeof result.data.Id_rol); // Depuración
+    
     // Esperar 2 segundos antes de redirigir
     setTimeout(() => {
-        switch (result.data.Id_rol) {
+        switch (String(result.data.Id_rol)) {
             case "1":
                 window.location.href = "Pagina_principal.php";
                 break;
@@ -85,10 +88,13 @@
             case "3":
                 window.location.href = "Admin_panel.php";
                 break;
+            case "4":
+                window.location.href = "SuperAdmin.php";
+                break;
             default:
-                window.location.href = "Pagina_principal.php";
-                    }
-                }, 8000); // 2 segundos
+                console.error("Rol no reconocido:", result.data.Id_rol);
+        }
+    }, 2000);
             }else {
                 errorDiv.textContent = result.message || "Error desconocido";
                 errorDiv.classList.remove('d-none');

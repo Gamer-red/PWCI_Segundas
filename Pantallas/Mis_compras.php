@@ -11,7 +11,7 @@ $userId = $_SESSION['Id_usuario'];
 $db = Database::getInstance();
 $conn = $db->getConnection();
 
-// Obtener todas las compras del usuario
+// Obtener todas las compras del usuario con más detalles
 $sqlCompras = "SELECT c.Id_compra, c.Fecha_compta, c.Hora_compra, c.Metodo_pago, 
                SUM(t.Subtotal) AS Total
                FROM compras c
@@ -23,17 +23,25 @@ $stmtCompras = $conn->prepare($sqlCompras);
 $stmtCompras->execute([$userId]);
 $compras = $stmtCompras->fetchAll(PDO::FETCH_ASSOC);
 
-// Obtener detalles de productos para cada compra
+// Obtener detalles de productos para cada compra con categoría y calificación
 $comprasConDetalles = [];
 foreach ($compras as $compra) {
-    $sqlDetalles = "SELECT t.Nombre, t.Cantidad, t.Precio_unitario, t.Subtotal,
-                   (SELECT Imagen FROM multimedia m 
-                    JOIN productos p ON m.Id_producto = p.Id_producto 
-                    WHERE p.Nombre = t.Nombre LIMIT 1) AS Imagen
+    $sqlDetalles = "SELECT 
+                    t.Id_producto, 
+                    t.Nombre, 
+                    t.Cantidad, 
+                    t.Precio_unitario, 
+                    t.Subtotal,
+                    cat.Nombre_categoria AS Categoria,
+                    (SELECT AVG(Calificacion) FROM calificacion WHERE Id_producto = t.Id_producto) AS Calificacion_promedio,
+                    (SELECT Imagen FROM multimedia m WHERE m.Id_producto = t.Id_producto LIMIT 1) AS Imagen,
+                    (SELECT COUNT(*) FROM calificacion WHERE Id_producto = t.Id_producto AND Id_usuario = ?) AS yaCalificado
                    FROM ticket_compra t
+                   JOIN productos p ON t.Id_producto = p.Id_producto
+                   JOIN categorias cat ON p.Id_categoria = cat.Id_categoria
                    WHERE t.Id_compra = ?";
     $stmtDetalles = $conn->prepare($sqlDetalles);
-    $stmtDetalles->execute([$compra['Id_compra']]);
+    $stmtDetalles->execute([$userId, $compra['Id_compra']]);
     $detalles = $stmtDetalles->fetchAll(PDO::FETCH_ASSOC);
     
     $compra['detalles'] = $detalles;
@@ -116,6 +124,22 @@ foreach ($compras as $compra) {
             height: 30px;
             margin-right: 10px;
         }
+        .star-rating {
+            font-size: 1rem;
+            color: #ffc107;
+        }
+        .star-rating .far {
+            color: #ddd;
+        }
+        .already-reviewed {
+            color: #28a745;
+            font-weight: bold;
+        }
+        .category-badge {
+            background-color: #6c757d;
+            color: white;
+            font-size: 0.75rem;
+        }
     </style>
 </head>
 <body>
@@ -187,8 +211,10 @@ foreach ($compras as $compra) {
                                     <thead>
                                         <tr>
                                             <th>Producto</th>
-                                            <th>Cantidad</th>
+                                            <th>Categoría</th>
+                                            <th>Calificación</th>
                                             <th>Precio unitario</th>
+                                            <th>Cantidad</th>
                                             <th>Subtotal</th>
                                         </tr>
                                     </thead>
@@ -207,8 +233,31 @@ foreach ($compras as $compra) {
                                                     <span><?php echo htmlspecialchars($detalle['Nombre']); ?></span>
                                                 </div>
                                             </td>
-                                            <td><?php echo $detalle['Cantidad']; ?></td>
+                                            <td>
+                                                <span class="badge category-badge"><?php echo htmlspecialchars($detalle['Categoria']); ?></span>
+                                            </td>
+                                            <td>
+                                                <div class="star-rating">
+                                                    <?php
+                                                    $rating = round($detalle['Calificacion_promedio'] ?? 0, 1);
+                                                    $fullStars = floor($rating);
+                                                    $halfStar = ($rating - $fullStars) >= 0.5;
+                                                    $emptyStars = 5 - $fullStars - ($halfStar ? 1 : 0);
+                                                    
+                                                    for ($i = 0; $i < $fullStars; $i++) {
+                                                        echo '<i class="fas fa-star"></i>';
+                                                    }
+                                                    if ($halfStar) {
+                                                        echo '<i class="fas fa-star-half-alt"></i>';
+                                                    }
+                                                    for ($i = 0; $i < $emptyStars; $i++) {
+                                                        echo '<i class="far fa-star"></i>';
+                                                    }
+                                                    ?>
+                                                </div>
+                                            </td>
                                             <td>$<?php echo number_format($detalle['Precio_unitario'], 2); ?></td>
+                                            <td><?php echo $detalle['Cantidad']; ?></td>
                                             <td>$<?php echo number_format($detalle['Subtotal'], 2); ?></td>
                                         </tr>
                                         <?php endforeach; ?>
@@ -217,12 +266,63 @@ foreach ($compras as $compra) {
                             </div>
                             
                             <div class="d-flex justify-content-end mt-3">
-                                <button class="btn btn-outline-secondary">
-                                    <i class="fas fa-comment me-2"></i>Dejar reseña y calificacion
-                                </button>
+                                <?php foreach ($compra['detalles'] as $detalle): ?>
+                                    <?php if (!$detalle['yaCalificado']): ?>
+                                        <button class="btn btn-outline-secondary me-2" data-bs-toggle="modal" data-bs-target="#reviewModal<?php echo $detalle['Id_producto']; ?>">
+                                            <i class="fas fa-comment me-2"></i>Dejar reseña
+                                        </button>
+                                    <?php else: ?>
+                                        <span class="text-success align-self-center"><i class="fas fa-check-circle me-2"></i>Ya calificaste este producto</span>
+                                    <?php endif; ?>
+                                <?php endforeach; ?>
                             </div>
                         </div>
                     </div>
+
+                    <!-- Modales para calificar productos -->
+                    <?php foreach ($compra['detalles'] as $detalle): ?>
+                        <?php if (!$detalle['yaCalificado']): ?>
+                            <div class="modal fade" id="reviewModal<?php echo $detalle['Id_producto']; ?>" tabindex="-1" aria-labelledby="reviewModalLabel" aria-hidden="true">
+                                <div class="modal-dialog">
+                                    <div class="modal-content">
+                                        <div class="modal-header">
+                                            <h5 class="modal-title" id="reviewModalLabel">Calificar producto: <?php echo htmlspecialchars($detalle['Nombre']); ?></h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                        </div>
+                                        <div class="modal-body">
+                                            <form action="Calificar_Producto.php" method="post">
+                                                <input type="hidden" name="product_id" value="<?php echo $detalle['Id_producto']; ?>">
+                                                <input type="hidden" name="compra_id" value="<?php echo $compra['Id_compra']; ?>">
+                                                
+                                                <div class="mb-3">
+                                                    <label class="form-label">Calificación:</label>
+                                                    <div class="star-rating">
+                                                        <i class="far fa-star" data-rating="1"></i>
+                                                        <i class="far fa-star" data-rating="2"></i>
+                                                        <i class="far fa-star" data-rating="3"></i>
+                                                        <i class="far fa-star" data-rating="4"></i>
+                                                        <i class="far fa-star" data-rating="5"></i>
+                                                        <input type="hidden" name="rating" id="rating-value-<?php echo $detalle['Id_producto']; ?>" required>
+                                                    </div>
+                                                </div>
+                                                
+                                                <div class="mb-3">
+                                                    <label for="comment-<?php echo $detalle['Id_producto']; ?>" class="form-label">Comentario:</label>
+                                                    <textarea class="form-control" id="comment-<?php echo $detalle['Id_producto']; ?>" name="comment" rows="3" required minlength="10"></textarea>
+                                                    <small class="text-muted">Mínimo 10 caracteres</small>
+                                                </div>
+                                                
+                                                <div class="modal-footer">
+                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                                    <button type="submit" class="btn btn-primary">Enviar calificación</button>
+                                                </div>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        <?php endif; ?>
+                    <?php endforeach; ?>
                 <?php endforeach; ?>
             </div>
         <?php endif; ?>
@@ -233,8 +333,29 @@ foreach ($compras as $compra) {
     <script>
         // Script para manejar interacciones
         document.addEventListener('DOMContentLoaded', function() {
-            // Puedes añadir aquí funcionalidades adicionales si necesitas
-            console.log('Página de mis compras cargada');
+            // Configurar calificación por estrellas para cada modal
+            document.querySelectorAll('.star-rating').forEach(ratingContainer => {
+                const stars = ratingContainer.querySelectorAll('i');
+                const ratingInput = ratingContainer.parentElement.querySelector('input[name="rating"]');
+                
+                stars.forEach(star => {
+                    star.addEventListener('click', function() {
+                        const rating = this.getAttribute('data-rating');
+                        ratingInput.value = rating;
+                        
+                        // Actualizar visualización de estrellas
+                        stars.forEach((s, index) => {
+                            if (index < rating) {
+                                s.classList.remove('far');
+                                s.classList.add('fas');
+                            } else {
+                                s.classList.remove('fas');
+                                s.classList.add('far');
+                            }
+                        });
+                    });
+                });
+            });
         });
     </script>
 </body>
